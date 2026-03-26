@@ -1,2 +1,2 @@
 
-Run machine-status script to see the current status and usage message.
+Run machine-status command/script to see the current status and other usage.
