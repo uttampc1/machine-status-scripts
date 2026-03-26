@@ -34,17 +34,14 @@ fi
 
 sudo cp ./machine-status.template ${STATUS_TEMPLATE}
 sudo touch ${TARGET_MSG}
-if [ -f "${TARGET_MSG}" ] && [ ! -s "${TARGET_MSG}" ]; then
-  # File exists and is empty
-  machine-release
-elif [ ! -e "${TARGET_MSG}" ]; then
-  # File does not exists
-  machine-release
-else
-  # File exists and is not empty, show content
-  machine-status
-fi
 sudo chmod 666 ${TARGET_MSG}
+if [ -s "${TARGET_MSG}" ]; then
+  # File exists and has content
+  machine-status
+else
+  # File exists and is empty or doesn't exists
+  machine-release
+fi
 
 sudo rm /etc/profile.d/check-machine-status.sh
 sudo ln -s ${TARGET_SCRIPT}  /etc/profile.d/check-machine-status.sh
