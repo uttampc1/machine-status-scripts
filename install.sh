@@ -1,5 +1,5 @@
 #!/bin/bash
-sudo echo "Installing template and creating symlinks in /usr/local directory"
+sudo echo "Installing script, template and creating symlinks in /usr/local directory"
 if [ ! -f /etc/motd ]; then
   echo
   echo "It seems /etc/motd file is not a regular file."
