@@ -1,3 +1,4 @@
+#!/bin/bash
 PROGNAME=`basename $0`
 DATE=`date`
 if [ "$PROGNAME" == "machine-reserve" ]; then
