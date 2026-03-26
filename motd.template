@@ -3,15 +3,6 @@
 
 ################################################################################
 
-Commands:
-    ** "machine-status"               -- To check machine status.
-    ** "machine-reserve <Name|email>" -- To reserve.
-    ** "machine-release"              -- To release
-    ** "machine-report"               -- Simple text report
-
-Note:
-    ** If reserved, contact current owner before reserving or using it.
-
 
               **********************************
 
@@ -20,6 +11,15 @@ Note:
               **********************************
 
 
+
+Commands:
+    $ machine-status                -- To check machine status.
+    $ machine-reserve <Name|email>  -- To reserve.
+    $ machine-release               -- To release
+    $ machine-report                -- Simple text report
+
+Note:
+    ** If reserved, contact current owner before reserving or using it.
 
 
 
