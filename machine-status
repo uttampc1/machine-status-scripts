@@ -1,0 +1,12 @@
+PROGNAME=`basename $0`
+if [ "$PROGNAME" == "machine-reserve" ]; then
+  username=$USER
+  if [ "x${1}" != "x" ]; then
+    username=$1
+  fi
+  sed "s/STATUS/Reserved by $username/g" /usr/local/etc/motd.template > /etc/motd
+elif [ "$PROGNAME" == "machine-release" ]; then
+  sed "s/STATUS/Available/g" /usr/local/etc/motd.template > /etc/motd
+fi
+echo
+cat /etc/motd
