@@ -13,7 +13,19 @@ sudo chmod 666 /var/log/machine-status.log
 sudo touch /etc/motd
 sudo chmod 666 /etc/motd
 
-sudo /bin/rm /usr/local/bin/machine-status /usr/local/bin/machine-release /usr/local/bin/machine-reserve /usr/local/bin/machine-report
+if [ -f /usr/local/bin/machine-status ]; then
+  sudo /bin/rm -f /usr/local/bin/machine-status
+fi
+if [ -L /usr/local/bin/machine-reserve ]; then
+  sudo /bin/rm -f /usr/local/bin/machine-reserve
+fi
+if [ -L /usr/local/bin/machine-release ]; then
+  sudo /bin/rm -f /usr/local/bin/machine-release
+fi
+if [ -L /usr/local/bin/machine-report ]; then
+  sudo /bin/rm -f /usr/local/bin/machine-report
+fi
+
 sudo cp ./machine-status /usr/local/bin
 sudo cp ./motd.template /usr/local/etc
 sudo chmod 555 ./machine-status /usr/local/bin
