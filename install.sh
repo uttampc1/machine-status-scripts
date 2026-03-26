@@ -1,7 +1,14 @@
 #!/bin/bash
 sudo echo "Installing script, template and creating symlinks in /usr/local directory"
 
-sudo touch /etc/motd
+
+if [ -f /etc/motd ]; then
+	sudo cp /etc/motd /etc/motd.orig
+	echo "Saved existing /etc/motd file as /etc/motd.orig"
+else
+  sudo touch /etc/motd
+fi
+
 sudo chmod 666 /etc/motd
 
 if [ -f /usr/local/bin/machine-status ]; then
