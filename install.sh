@@ -43,6 +43,8 @@ else
   machine-release
 fi
 
-sudo rm /etc/profile.d/check-machine-status.sh
+if [ -f /etc/profile.d/check-machine-status.sh ]; then
+  sudo rm /etc/profile.d/check-machine-status.sh
+fi
 sudo ln -s ${TARGET_SCRIPT}  /etc/profile.d/check-machine-status.sh
 
