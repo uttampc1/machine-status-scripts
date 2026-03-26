@@ -5,8 +5,13 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
     username=$1
   fi
   sed "s/STATUS/Reserved by $username/g" /usr/local/etc/motd.template > /etc/motd
+  echo "`date`:Reserved by $username" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-release" ]; then
   sed "s/STATUS/Available/g" /usr/local/etc/motd.template > /etc/motd
+  echo "`date`:Released" >> /var/log/machine-status.log
+elif [ "$PROGNAME" == "machine-report" ]; then
+  cat /var/log/machine-status.log
+  exit
 fi
 echo
 cat /etc/motd
