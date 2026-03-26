@@ -1,19 +1,22 @@
 #!/bin/bash
-PROGNAME=`basename $0`
+PROGNAME=$(basename -- "$0") #`basename $0`
 DATE=`date`
+TARGET_MSG="/usr/local/etc/machine-status.msg"
+STATUS_TEMPLATE="/usr/local/etc/machine-status.template"
+
 if [ "$PROGNAME" == "machine-reserve" ]; then
   username=$USER
   if [ "x${1}" != "x" ]; then
     username=$1
   fi
-  sed -e "s/STATUS/Reserved by $username/g" -e "s/DATE/$DATE/g" /usr/local/etc/motd.template > /etc/motd
+  sed -e "s/STATUS/Reserved by $username/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
   echo "$DATE:Reserved by $username" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-release" ]; then
-  sed -e "s/STATUS/Available/g" -e "s/DATE/$DATE/g" /usr/local/etc/motd.template > /etc/motd
+  sed -e "s/STATUS/Available/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
   echo "$DATE:Released" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-report" ]; then
   cat /var/log/machine-status.log
   exit
 fi
 echo
-cat /etc/motd
+cat ${TARGET_MSG}
