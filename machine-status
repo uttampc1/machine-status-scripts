@@ -12,20 +12,22 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
   if [ -f $TARGET_MSG ]; then
     x=`grep "Reserved by" $TARGET_MSG`
     if [ "x${x}" != "x" ]; then
-			n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
+      n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
       echo 
       echo "#############################"
       echo "${n}"
       echo "#############################"
       echo 
-      read -p "Do you still want to proceed? (y/n) " yn
+      read -p "WARNING: Do you still want to proceed? (y/n) " yn
       case $yn in
-        [Yy] ) echo "ok, we will proceed";;
+        [Yy] ) echo "Ok, we will proceed";;
         [Nn] ) echo "exiting..."; echo; exit;;
       esac
     fi
   fi 
   sed -e "s/STATUS/Reserved by $username/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
+  wall "WARNING: Machine is reserved by $username."
+  wall "INFO: Use machine-status command to see the latest status."
   echo "$DATE:Reserved by $username" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-release" ]; then
   sed -e "s/STATUS/Available/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
