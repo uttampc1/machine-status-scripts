@@ -33,7 +33,7 @@ elif [ "$PROGNAME" == "machine-release" ]; then
   sed -e "s/STATUS/Available/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
   echo "$DATE:Released" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-report" ]; then
-  cat /var/log/machine-status.log
+  tail -n 25 /var/log/machine-status.log
   exit
 fi
 echo
