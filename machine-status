@@ -26,12 +26,16 @@ show_usage() {
 show_red() {
   local msg=$1
   printf '\n'
+  printf "${BOLD_RED}=============================================${RESET}\n"
+  printf '\n'
   printf "${BOLD_RED} !! ${msg} !!${RESET}\n"
   printf '\n'
   show_usage
 }
 
 show_green() {
+  printf '\n'
+  printf "${BOLD_GREEN}=============================================${RESET}\n"
   printf '\n'
   printf "${BOLD_GREEN}>>>> Machine is available <<<<${RESET}\n"
   printf '\n'
