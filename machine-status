@@ -12,18 +12,30 @@ BOLD_GREEN='\033[1;32m'
 RESET='\033[0m'
 BLINK='\033[5m'
 
+show_usage() {
+  printf "Usage:\n"
+  printf "\t$ machine-status                -- To check machine status.\n"
+  printf "\t$ machine-reserve <Name|email>  -- To reserve.\n"
+  printf "\t$ machine-release               -- To release\n"
+  printf "\t$ machine-report                -- Simple text report\n"
+
+  printf "Note:\n"
+  printf "\t** If reserved, contact current owner before reserving or using it.\n"
+}
+
 show_red() {
   local msg=$1
   printf '\n'
-  printf "${BOLD_RED}${msg}${RESET}\n"
+  printf "${BOLD_RED} !! ${msg} !!${RESET}\n"
   printf '\n'
+  show_usage
 }
 
 show_green() {
-  local msg=$1
   printf '\n'
-  printf "${BOLD_GREEN}${msg}${RESET}\n"
+  printf "${BOLD_GREEN}>>>> Machine is available <<<<${RESET}\n"
   printf '\n'
+  show_usage
 }
 
 if [ "$PROGNAME" == "machine-reserve" ]; then
@@ -91,7 +103,7 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
   show_red "${username}: Machine is now reserved for you!"
 elif [ "$PROGNAME" == "machine-release" ]; then
   sed -e "s/STATUS/Available/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
-  show_green "Machine is available"
+  show_green
   echo "$DATE:Released" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-report" ]; then
   tail -n 25 /var/log/machine-status.log
@@ -102,7 +114,7 @@ else
     n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
     show_red "${n}"
   else
-    show_green "Machine is available"
+    show_green
   fi
 fi
 echo
