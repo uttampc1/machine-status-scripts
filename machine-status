@@ -13,6 +13,7 @@ BOLD_YELLOW='\033[1;33m'
 BOLD_MAGENTA='\033[1;35m'
 RESET='\033[0m'
 BLINK='\033[5m'
+DIM='\033[2m'
 
 show_usage() {
   printf "${BOLD_YELLOW}Usage:${RESET}\n"
@@ -21,33 +22,40 @@ show_usage() {
   printf "\t$ machine-release              -- To make it ${BOLD_GREEN}available${RESET} for others\n"
   printf "\t$ machine-report               -- Simple text ${BOLD_MAGENTA}report${RESET}\n"
 
-  printf "${BOLD_RED}NOTE:${RESET}\n"
-  printf "\tWhen done, release it using ${BOLD_YELLOW}machine-release${RESET} command.\n"
+  printf "\n${BOLD_YELLOW}IMPORTANT NOTE:${RESET}\n"
+  printf "\tWhen done, release the machine using the ${BOLD_YELLOW}machine-release${RESET} command.\n"
+  printf "\n${DIM}Disclaimer:${RESET}\n"
+  printf "\t${DIM}This is for coordination and information purposes only.${RESET}\n"
+  printf "\t${BOLD_RED}DO NOT ASSUME THAT IT WILL PREVENT ACTUAL USE OF THE MACHINE.${RESET}\n"
 }
 
 show_red() {
   local msg=$1
   local dt=$2
   printf '\n'
-  printf "${BOLD_RED}=============================================${RESET}\n"
+  printf "${BOLD_RED}"
+  printf "======================================================================${RESET}\n"
   printf '\n'
   printf "${BOLD_RED}>>>> ${msg}${RESET}\n"
   printf "${BOLD_WHITE}Since:${dt}${RESET}\n"
   printf '\n'
   show_usage
-  printf "\n${BOLD_RED}=============================================${RESET}\n"
+  printf "${BOLD_RED}"
+  printf "======================================================================${RESET}\n"
 }
 
 show_green() {
   local dt=$1
   printf '\n'
-  printf "${BOLD_GREEN}=============================================${RESET}\n"
+  printf "${BOLD_GREEN}"
+  printf "======================================================================${RESET}\n"
   printf '\n'
   printf "${BOLD_GREEN}>>>> Machine is available <<<<${RESET}\n"
   printf "${BOLD_WHITE}Since:${dt} ${RESET}\n"
   printf '\n'
   show_usage
-  printf "\n${BOLD_GREEN}=============================================${RESET}\n"
+  printf "\n${BOLD_GREEN}"
+  printf "======================================================================${RESET}\n"
 }
 
 if [ "$PROGNAME" == "machine-reserve" ]; then
