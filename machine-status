@@ -23,7 +23,7 @@ show_usage() {
   printf "\t$ machine-report               -- Simple text ${BOLD_MAGENTA}report${RESET}\n"
 
   printf "\n${BOLD_YELLOW}IMPORTANT NOTE:${RESET}\n"
-  printf "\tWhen done, release the machine using the ${BOLD_YELLOW}machine-release${RESET} command.\n"
+  printf "\tWhen done, release the machine using the ${BOLD_GREEN}machine-release${RESET} command.\n"
   printf "\n${DIM}Disclaimer:${RESET}\n"
   printf "\t${DIM}This is for coordination and information purposes only.${RESET}\n"
   printf "\t${BOLD_RED}DO NOT ASSUME THAT IT WILL PREVENT ACTUAL USE OF THE MACHINE.${RESET}\n"
