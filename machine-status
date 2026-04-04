@@ -25,19 +25,23 @@ show_usage() {
 
 show_red() {
   local msg=$1
+  local dt=$2
   printf '\n'
   printf "${BOLD_RED}=============================================${RESET}\n"
   printf '\n'
-  printf "${BOLD_RED} !! ${msg} !!${RESET}\n"
+  printf "${BOLD_RED}>>>> ${msg}${RESET}\n"
+  printf "${BOLD_WHITE}Since:${dt}${RESET}\n"
   printf '\n'
   show_usage
 }
 
 show_green() {
+  local dt=$1
   printf '\n'
   printf "${BOLD_GREEN}=============================================${RESET}\n"
   printf '\n'
   printf "${BOLD_GREEN}>>>> Machine is available <<<<${RESET}\n"
+  printf "${BOLD_WHITE}Since:${dt} ${RESET}\n"
   printf '\n'
   show_usage
 }
@@ -100,25 +104,26 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
       done
     fi
   fi 
-  sed -e "s/STATUS/Reserved by $username/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
+  sed -e "s/STATUS/Reserved by $username/g" -e "s/DATE/Date: $DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
   wall "WARNING: Machine is reserved by $username."
   wall "INFO: Use machine-status command to see the latest status."
   echo "$DATE:Reserved by $username" >> /var/log/machine-status.log
-  show_red "${username}: Machine is now reserved for you!"
+  show_red "${username}: Machine is now reserved for you!" " ${DATE}"
 elif [ "$PROGNAME" == "machine-release" ]; then
-  sed -e "s/STATUS/Available/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
-  show_green
+  sed -e "s/STATUS/Available/g" -e "s/DATE/Date: $DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
+  show_green " ${DATE}"
   echo "$DATE:Released" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-report" ]; then
   tail -n 25 /var/log/machine-status.log
   exit
 else
+  dt=`grep "Date: " $TARGET_MSG | cut -d':' -f2-`
   x=`grep "Reserved by" $TARGET_MSG`
   if [ "x${x}" != "x" ]; then
     n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
-    show_red "${n}"
+    show_red "${n}" "${dt}"
   else
-    show_green
+    show_green "${dt}"
   fi
 fi
 echo
