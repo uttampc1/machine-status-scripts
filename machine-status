@@ -4,6 +4,28 @@ DATE=`date`
 TARGET_MSG="/usr/local/etc/machine-status.msg"
 STATUS_TEMPLATE="/usr/local/etc/machine-status.template"
 
+BG_RED='\033[41m'
+BG_NONE='\033[49m'
+BOLD_WHITE='\033[1;37m'
+BOLD_RED='\033[1;31m'
+BOLD_GREEN='\033[1;32m'
+RESET='\033[0m'
+BLINK='\033[5m'
+
+show_red() {
+  local msg=$1
+  printf '\n'
+  printf "${BOLD_RED}${msg}${RESET}\n"
+  printf '\n'
+}
+
+show_green() {
+  local msg=$1
+  printf '\n'
+  printf "${BOLD_GREEN}${msg}${RESET}\n"
+  printf '\n'
+}
+
 if [ "$PROGNAME" == "machine-reserve" ]; then
   username=$USER
   if [ "x${1}" != "x" ]; then
@@ -13,14 +35,7 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
     x=`grep "Reserved by" $TARGET_MSG`
     if [ "x${x}" != "x" ]; then
       n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
-      username=`echo $n|awk '{print $3}'`
-      BG_RED='\033[41m'
-      BG_NONE='\033[49m'
-      BOLD_WHITE='\033[1;37m'
-      BOLD_RED='\033[1;31m'
-      RESET='\033[0m'
-      BLINK='\033[5m'
-
+      currentOwner=`echo $n|awk '{print $3}'`
       # Simple STOP box
       printf '\n'
       printf "\t${BG_RED}${BOLD_WHITE}  ╔══════════════════════╗  ${RESET}\n"
@@ -44,7 +59,7 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
         fi
         if [[ $response =~ ^([yY][eE][sS]|[yY])$ ]]; then
           echo
-          printf "WARNING: Please inform ${BG_RED}${username}${RESET} about your reservation\n"
+          printf "WARNING: Please inform ${BG_RED}${currentOwner}${RESET} about your reservation\n"
           while true;
           do
             read -r -p "WARNING: Continue with reservation? (Yes or No)? " response
@@ -73,12 +88,21 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
   wall "WARNING: Machine is reserved by $username."
   wall "INFO: Use machine-status command to see the latest status."
   echo "$DATE:Reserved by $username" >> /var/log/machine-status.log
+  show_red "${username}: Machine is now reserved for you!"
 elif [ "$PROGNAME" == "machine-release" ]; then
   sed -e "s/STATUS/Available/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
+  show_green "Machine is available"
   echo "$DATE:Released" >> /var/log/machine-status.log
 elif [ "$PROGNAME" == "machine-report" ]; then
   tail -n 25 /var/log/machine-status.log
   exit
+else
+  x=`grep "Reserved by" $TARGET_MSG`
+  if [ "x${x}" != "x" ]; then
+    n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
+    show_red "${n}"
+  else
+    show_green "Machine is available"
+  fi
 fi
 echo
-cat ${TARGET_MSG}
