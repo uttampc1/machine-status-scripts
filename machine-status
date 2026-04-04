@@ -13,16 +13,60 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
     x=`grep "Reserved by" $TARGET_MSG`
     if [ "x${x}" != "x" ]; then
       n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
+      username=`echo $n|awk '{print $3}'`
+      BG_RED='\033[41m'
+      BG_NONE='\033[49m'
+      BOLD_WHITE='\033[1;37m'
+      BOLD_RED='\033[1;31m'
+      RESET='\033[0m'
+      BLINK='\033[5m'
+
+      # Simple STOP box
+      printf '\n'
+      printf "\t${BG_RED}${BOLD_WHITE}  ╔══════════════════════╗  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║                      ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║     ⛔  STOP!  ⛔    ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║                      ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ╚══════════════════════╝  ${RESET}\n"
+      printf '\n'
+
+      # Optional: blinking warning (some terminals support this)
+      printf '\n'
+      printf "\t${BLINK}${BOLD_RED}${n}${RESET}\n"
+      printf '\n'
       echo 
-      echo "#############################"
-      echo "${n}"
-      echo "#############################"
-      echo 
-      read -p "WARNING: Do you still want to proceed? (y/n) " yn
-      case $yn in
-        [Yy] ) echo "Ok, we will proceed";;
-        [Nn] ) echo "exiting..."; echo; exit;;
-      esac
+      while true;
+      do
+        read -r -p "WARNING: Do you still want to proceed? (Yes or No)? " response
+        if [[ $response =~ ^([yY]|[nN])$ ]]; then
+          echo "INFO: Please enter yes or no"
+          continue
+        fi
+        if [[ $response =~ ^([yY][eE][sS]|[yY])$ ]]; then
+          echo
+          printf "WARNING: Please inform ${BG_RED}${username}${RESET} about your reservation\n"
+          while true;
+          do
+            read -r -p "WARNING: Continue with reservation? (Yes or No)? " response
+            if [[ $response =~ ^([yY]|[nN])$ ]]; then
+              echo "INFO: Please enter yes or no"
+              continue
+            elif [[ $response =~ ^([yY][eE][sS]|[yY])$ ]]; then
+             echo "INFO: Ok, we will proceed."
+             break;
+            else
+              echo "Exiting ..."
+              echo
+              exit 0
+            fi
+           done
+          break
+        else
+          echo "Exiting ..."
+          echo
+          exit 0
+        fi
+      done
     fi
   fi 
   sed -e "s/STATUS/Reserved by $username/g" -e "s/DATE/$DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
