@@ -27,6 +27,8 @@ show_usage() {
   printf "\n${DIM}Disclaimer:${RESET}\n"
   printf "\t${DIM}This is for coordination and information purposes only.${RESET}\n"
   printf "\t${BOLD_RED}DO NOT ASSUME THAT IT WILL PREVENT ACTUAL USE OF THE MACHINE.${RESET}\n"
+  printf "\n${DIM}Repository:${RESET}\n"
+  printf "\t${BOLD_RED}https://github.com/uttampc1/machine-status-scripts.git${RESET}\n"
 }
 
 show_red() {
