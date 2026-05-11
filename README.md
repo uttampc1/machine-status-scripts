@@ -29,6 +29,8 @@ Disclaimer:
         This is for coordination and information purposes only.
         DO NOT ASSUME THAT IT WILL PREVENT ACTUAL USE OF THE MACHINE.
 
+Repository:
+        https://github.com/uttampc1/machine-status-scripts.git
 ======================================================================
 
 ```
