@@ -1,0 +1,549 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# update_machine  —  Update machine fields (NOT status/reservation)
+#
+# Usage:
+#   Interactive:  ./update_machine.sh --interactive
+#   Flag mode:    ./update_machine.sh -m worker-01 [-n name] [-p platform]
+#                     [-i ip] [-b bmc] [-o os] [-d description]
+#
+# Flags:
+#   -m  current machine name   (required)
+#   -n  new machine name       (rename)
+#   -p  platform name
+#   -i  IP address
+#   -b  BMC name
+#   -o  OS
+#   -d  description
+#   --interactive
+#   --help
+#
+# To update status/reservation use: update_machine_status.sh
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+SERVER="http://10.216.149.190:5000"
+CURRENT_NAME=""
+INTERACTIVE=false
+NEW_NAME=""
+NEW_PLATFORM=""
+NEW_IP=""
+NEW_BMC=""
+NEW_OS=""
+NEW_DESC=""
+
+RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+
+usage() {
+    cat <<EOF
+
+${BOLD}update_machine.sh${RESET} — Update machine fields (NOT status/reservation)
+Server: ${SERVER}
+
+${BOLD}INTERACTIVE MODE${RESET}
+  $(basename "$0") --interactive
+
+${BOLD}FLAG MODE${RESET}  (supply only the flags for fields you want to change)
+  $(basename "$0") -m <current_name> [field flags]
+
+${BOLD}FLAGS${RESET}
+  -m  current machine name   (required)
+  -n  new machine name       (rename)
+  -p  platform name
+  -i  IP address
+  -b  BMC name
+  -o  OS
+  -d  description
+  --interactive
+  --help
+
+${BOLD}NOTE${RESET}
+  To reserve/release a machine use: update_machine_status.sh
+
+${BOLD}EXAMPLES${RESET}
+  $(basename "$0") --interactive
+  $(basename "$0") -m worker-01 -i 10.0.1.55
+  $(basename "$0") -m worker-01 -o "RHEL 9.4"
+  $(basename "$0") -m worker-01 -n build-node-01
+  $(basename "$0") -m worker-01 -p aarch64 -i 10.0.2.1 -o "RHEL 9.4"
+
+EOF
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# ─────────────────────────────────────────────────────────────────────────────
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --interactive)  INTERACTIVE=true;     shift ;;
+            --help|-h)      usage ;;
+            -m)             CURRENT_NAME="$2";    shift 2 ;;
+            -n)             NEW_NAME="$2";        shift 2 ;;
+            -p)             NEW_PLATFORM="$2";    shift 2 ;;
+            -i)             NEW_IP="$2";          shift 2 ;;
+            -b)             NEW_BMC="$2";         shift 2 ;;
+            -o)             NEW_OS="$2";          shift 2 ;;
+            -d)             NEW_DESC="$2";        shift 2 ;;
+            *)
+                printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
+                printf "Run with --help for usage.\n" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompt helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+ask() {
+    local var="$1" prompt="$2" current="${3:-}" value=""
+
+    if [[ -n "$current" ]]; then
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET} ${YELLOW}[%s]${RESET}: " \
+               "$prompt" "$current"
+    else
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET} ${YELLOW}[(none)]${RESET}: " \
+               "$prompt"
+    fi
+
+    read -r value
+    printf -v "$var" '%s' "$value"
+}
+
+ask_required() {
+    local var="$1" prompt="$2" current="${3:-}"
+
+    while true; do
+        ask "$var" "$prompt" "$current"
+        local val; eval val="\$$var"
+
+        if [[ -z "$val" && -n "$current" ]]; then
+            printf -v "$var" '%s' "$current"; return
+        fi
+
+        local stripped="${val//[[:space:]]/}"
+        if [[ -n "$stripped" ]]; then
+				    return
+				fi
+        printf "${RED}  ✗  This field cannot be blank.${RESET}\n"
+    done
+}
+
+ask_yes_no() {
+    local var="$1" prompt="$2" default="${3:-n}"
+    local hint
+    if [[ "$default" == "y" ]]; then
+		    hint="Y/n" || hint="y/N"
+    fi
+
+    while true; do
+        printf "${CYAN}?${RESET} ${BOLD}%s${RESET} ${YELLOW}[%s]${RESET}: " \
+               "$prompt" "$hint"
+        local value=""
+        read -r value
+        if [[ -z "$value" ]]; then
+				    value="$default"
+        fi
+
+        case "${value,,}" in
+            y|yes)  printf -v "$var" 'true';  return ;;
+            n|no)   printf -v "$var" 'false'; return ;;
+            *)      printf "${RED}  Please type y or n.${RESET}\n" ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fetch machine from API
+# ─────────────────────────────────────────────────────────────────────────────
+fetch_machine() {
+    local name="$1"
+    local response http_body http_code
+    local tmpout tmperr
+    tmpout=$(mktemp)
+    tmperr=$(mktemp)
+
+    # ── curl ──────────────────────────────────────────────────────────────────
+    if ! response=$(curl -s -w "\n%{http_code}" \
+            --connect-timeout 5 \
+            -H "Accept: application/json" \
+            "$SERVER/machines" 2>"$tmperr"); then
+        printf "${RED}Error: cannot reach server at %s${RESET}\n" "$SERVER" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    if [[ "$http_code" != "200" ]]; then
+        printf "${RED}Error: server at %s returned HTTP %s${RESET}\n" \
+               "$SERVER" "$http_code" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    set +e
+    # ── python search — write result to tmpout, exit code to tmperr ───────────
+    echo "$http_body" | python3 -c "
+import sys, json
+
+try:
+    machines = json.load(sys.stdin)
+except Exception as e:
+    sys.stderr.write(f'parse_error\n')
+    sys.exit(2)
+
+target = sys.argv[1]
+found  = next((m for m in machines if m['machine_name'] == target), None)
+
+if found is None:
+    sys.exit(1)
+
+print(json.dumps(found))
+sys.exit(0)
+" "$name" > "$tmpout" 2>"$tmperr"
+    local py_rc=$?
+    set -e
+
+    local result
+    result=$(cat "$tmpout")
+    rm -f "$tmpout" "$tmperr"
+
+    case $py_rc in
+        0)
+            MACHINE_JSON="$result"
+            return 0
+            ;;
+        1)
+            printf "${RED}Error: machine '%s' not found.${RESET}\n" "$name" >&2
+            exit 1
+            ;;
+        *)
+            printf "${RED}Error: could not parse server response.${RESET}\n" >&2
+            exit 2
+            ;;
+    esac
+}
+
+get_field() {
+    local field="$1"
+    echo "$MACHINE_JSON" | python3 -c "
+import sys, json
+m = json.load(sys.stdin)
+val = m.get('$field')
+print(val if val is not None else '')
+" 2>/dev/null
+}
+
+print_machine_details() {
+    local label="${1:-Current values}"
+    echo ""
+    printf "${BOLD}${YELLOW}── %s ──────────────────────────${RESET}\n" "$label"
+    echo "$MACHINE_JSON" | python3 -c "
+import sys, json
+m = json.load(sys.stdin)
+fields = [
+    ('Machine name',  'machine_name'),
+    ('Platform',      'platform_name'),
+    ('IP address',    'ip_address'),
+    ('BMC name',      'bmc_name'),
+    ('OS',            'os'),
+    ('Status',        'status'),
+    ('Reserved by',   'reserved_by'),
+    ('Description',   'description'),
+]
+for label, key in fields:
+    val = m.get(key) or '(none)'
+    print(f'  {label:<18} {val}')
+"
+    printf "${BOLD}${YELLOW}─────────────────────────────────────────────${RESET}\n"
+    echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Change summary — only non-status fields
+# ─────────────────────────────────────────────────────────────────────────────
+print_change_summary() {
+    echo ""
+    printf "${BOLD}${CYAN}── Planned changes ──────────────────────────${RESET}\n"
+
+    local any=false
+
+    _show_change() {
+        local label="$1" old="$2" new="$3"
+        if [[ -n "$new" && "$new" != "$old" ]]; then
+            printf "  ${BOLD}%-18s${RESET} ${RED}%s${RESET}  →  ${GREEN}%s${RESET}\n" \
+                   "$label:" "${old:-(none)}" "$new"
+            any=true
+        fi
+    }
+
+    _show_change "Machine name"  "$(get_field machine_name)"  "$NEW_NAME"
+    _show_change "Platform"      "$(get_field platform_name)" "$NEW_PLATFORM"
+    _show_change "IP address"    "$(get_field ip_address)"    "$NEW_IP"
+    _show_change "BMC name"      "$(get_field bmc_name)"      "$NEW_BMC"
+    _show_change "OS"            "$(get_field os)"            "$NEW_OS"
+    _show_change "Description"   "$(get_field description)"   "$NEW_DESC"
+
+    printf "${BOLD}${CYAN}─────────────────────────────────────────────${RESET}\n"
+
+    if [[ "$any" == false ]]; then
+        printf "  ${YELLOW}No changes detected.${RESET}\n\n"
+        return 1
+    fi
+    echo ""
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JSON helpers
+# ─────────────────────────────────────────────────────────────────────────────
+json_val() {
+    local v="$1"
+    local stripped="${v//[[:space:]]/}"
+    if [[ -z "$stripped" ]]; then printf 'null'; return; fi
+    v="${v//\\/\\\\}"; v="${v//\"/\\\"}"
+    printf '"%s"' "$v"
+}
+
+build_payload() {
+    local parts=()
+
+    if [[ -n "$NEW_NAME"     ]]; then
+		    parts+=("\"machine_name\":  $(json_val "$NEW_NAME")")
+		fi
+    if [[ -n "$NEW_PLATFORM" ]]; then
+		    parts+=("\"platform_name\": $(json_val "$NEW_PLATFORM")")
+		fi
+    if [[ -n "$NEW_IP"       ]]; then
+		    parts+=("\"ip_address\":    $(json_val "$NEW_IP")")
+		fi
+    if [[ -n "$NEW_BMC"      ]]; then
+		    parts+=("\"bmc_name\":      $(json_val "$NEW_BMC")")
+		fi
+    if [[ -n "$NEW_OS"       ]]; then
+		    parts+=("\"os\":            $(json_val "$NEW_OS")")
+		fi
+    if [[ -n "$NEW_DESC"     ]]; then
+		    parts+=("\"description\":   $(json_val "$NEW_DESC")")
+		fi
+
+    if [[ ${#parts[@]} -eq 0 ]]; then echo ""; return 1; fi
+
+    local payload="{"
+    for i in "${!parts[@]}"; do
+        payload+=" ${parts[$i]}"
+        (( i < ${#parts[@]} - 1 )) && payload+=","
+    done
+    payload+=" }"
+    echo "$payload"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Submit
+# ─────────────────────────────────────────────────────────────────────────────
+do_update() {
+    local payload
+    payload=$(build_payload) || {
+        printf "${YELLOW}  Nothing to update.${RESET}\n\n"; exit 0
+    }
+
+    printf "${CYAN}  Updating '%s' on %s ...${RESET}\n" "$CURRENT_NAME" "$SERVER"
+
+    local response http_body http_code
+    response=$(curl -s -w "\n%{http_code}" \
+        -X PUT "$SERVER/machines/$CURRENT_NAME" \
+        -H "Content-Type: application/json" \
+        -d "$payload")
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    echo ""
+    if [[ "$http_code" == "200" ]]; then
+        printf "${GREEN}  ✓  Updated! %s${RESET}\n\n" "$http_body"
+    elif [[ "$http_code" == "404" ]]; then
+        printf "${RED}  ✗  Not found: '%s' does not exist.${RESET}\n\n" \
+               "$CURRENT_NAME"; exit 1
+    elif [[ "$http_code" == "409" ]]; then
+        printf "${RED}  ✗  Conflict: %s${RESET}\n\n" "$http_body"; exit 1
+    else
+        printf "${RED}  ✗  Failed (HTTP %s): %s${RESET}\n\n" "$http_code" "$http_body"
+        exit 1
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Interactive mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_interactive() {
+    echo ""
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    printf "${BOLD}${CYAN}  Update Machine Fields  —  %s${RESET}\n" "$SERVER"
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    printf "  ${YELLOW}Press Enter to keep the current value.${RESET}\n"
+    printf "  ${YELLOW}To update status/reservation use: update_machine_status.sh${RESET}\n"
+    echo ""
+
+    # find the machine
+    while true; do
+        ask_required CURRENT_NAME "Current machine name" "$CURRENT_NAME"
+        printf "${CYAN}  Looking up '%s'...${RESET}\n" "$CURRENT_NAME"
+        fetch_machine "$CURRENT_NAME"
+				local fetch_rc=$?
+        
+				case $fetch_rc in
+            0)  
+						    break
+								;;    # found — exit the loop
+            1)
+                printf "${RED}  ✗  Machine '%s' not found. Try again.${RESET}\n\n" \
+                       "$CURRENT_NAME" >&2
+                CURRENT_NAME=""
+                ;;
+        esac
+    done
+
+    print_machine_details "Current values"
+    printf "  ${YELLOW}(Press Enter to keep current value for each field)${RESET}\n\n"
+
+    ask NEW_NAME     "New machine name (rename)"  "$(get_field machine_name)"
+    if [[ "$NEW_NAME"     == "$(get_field machine_name)"  ]]; then
+		    NEW_NAME=""
+		fi
+    ask NEW_PLATFORM "Platform name"              "$(get_field platform_name)"
+    if [[ "$NEW_PLATFORM" == "$(get_field platform_name)" ]]; then
+		    NEW_PLATFORM=""
+		fi
+    ask NEW_IP       "IP address"                 "$(get_field ip_address)"
+    if [[ "$NEW_IP"       == "$(get_field ip_address)"    ]]; then
+		    NEW_IP=""
+		fi
+    ask NEW_BMC      "BMC name"                   "$(get_field bmc_name)"
+    if [[ "$NEW_BMC"      == "$(get_field bmc_name)"      ]]; then
+		    NEW_BMC=""
+		fi
+    ask NEW_OS       "Operating system"           "$(get_field os)"
+    if [[ "$NEW_OS"       == "$(get_field os)"            ]]; then
+		    NEW_OS=""
+		fi
+    ask NEW_DESC     "Description"                "$(get_field description)"
+    if [[ "$NEW_DESC"     == "$(get_field description)"   ]]; then
+		    NEW_DESC=""
+		fi
+
+    print_change_summary || {
+        printf "${YELLOW}  No changes made. Exiting.${RESET}\n\n"; exit 0
+    }
+
+    local CONFIRMED
+    while true; do
+        printf "${CYAN}?${RESET} ${BOLD}Apply these changes? [Y/n/edit]${RESET}: "
+        read -r CONFIRMED
+        case "${CONFIRMED,,}" in
+            ""|y|yes)  break ;;
+            n|no|q)
+                printf "${YELLOW}  Aborted. Nothing was changed.${RESET}\n\n"
+                exit 0
+                ;;
+            e|edit)
+                echo ""
+                printf "${YELLOW}  Re-editing...${RESET}\n\n"
+                ask NEW_NAME     "New machine name"   "${NEW_NAME:-$(get_field machine_name)}"
+                ask NEW_PLATFORM "Platform name"      "${NEW_PLATFORM:-$(get_field platform_name)}"
+                ask NEW_IP       "IP address"         "${NEW_IP:-$(get_field ip_address)}"
+                ask NEW_BMC      "BMC name"           "${NEW_BMC:-$(get_field bmc_name)}"
+                ask NEW_OS       "Operating system"   "${NEW_OS:-$(get_field os)}"
+                ask NEW_DESC     "Description"        "${NEW_DESC:-$(get_field description)}"
+                print_change_summary || {
+                    printf "${YELLOW}  No changes. Exiting.${RESET}\n\n"; exit 0
+                }
+                ;;
+            *)
+                printf "${RED}  Please type y, n, or edit.${RESET}\n" ;;
+        esac
+    done
+
+    echo ""
+    do_update
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Flag mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_flag_mode() {
+    if [[ -z "$CURRENT_NAME" ]]; then
+        printf "${RED}Error: -m current_machine_name is required.${RESET}\n"
+        printf "Run with --help for usage.\n"; exit 1
+    fi
+
+    local any_change=false
+    for v in "$NEW_NAME" "$NEW_PLATFORM" "$NEW_IP" \
+              "$NEW_BMC" "$NEW_OS" "$NEW_DESC"; do
+        if [[ -n "$v" ]]; then
+				  any_change=true && break
+        fi
+    done
+
+    if [[ "$any_change" == false ]]; then
+        printf "${YELLOW}Nothing to update. Supply at least one field flag.${RESET}\n"
+        printf "Run with --help for usage.\n"; exit 1
+    fi
+
+    printf "${CYAN}  Looking up '%s'...${RESET}\n" "$CURRENT_NAME"
+    fetch_machine "$CURRENT_NAME"
+		local fetch_rc=$?
+        
+		case $fetch_rc in
+        1)
+            printf "${RED}  ✗  Machine '%s' not found. ${RESET}\n\n" \
+                   "$CURRENT_NAME"
+            exit 1
+            ;;
+        2)
+            printf "${RED}  ✗  Could not reach server at %s${RESET}\n\n" \
+                   "$SERVER" >&2
+            exit 2    # no point retrying -- Backend server is down
+            ;;
+    esac
+
+    print_machine_details "Current values"
+    print_change_summary || {
+        printf "${YELLOW}  No effective changes. Exiting.${RESET}\n\n"; exit 0
+    }
+
+    if [[ -t 0 ]]; then
+        local CONFIRMED
+        ask_yes_no CONFIRMED "Apply these changes?" "y"
+        if [[ "$CONFIRMED" == false ]]; then
+            printf "${YELLOW}  Aborted.${RESET}\n\n"; exit 0
+        fi
+        echo ""
+    fi
+
+    do_update
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────────────────
+main() {
+    if [[ $# -eq 0 ]]; then
+		    usage
+		fi
+    parse_args "$@"
+    if [[ "$INTERACTIVE" == true ]]; then
+        run_interactive
+    else
+        run_flag_mode
+    fi
+}
+
+main "$@"

@@ -1,0 +1,439 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# delete_machine  —  Remove a machine from the inventory
+#
+# Usage:
+#   Interactive:  ./delete_machine.sh --interactive
+#   Flag mode:    ./delete_machine.sh -m worker-01 [-f]
+#
+# Options:
+#   -m  machine name      (required)
+#   -f  force delete      (skip reserved check)
+#   --interactive         guided prompt mode
+#   --help
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+# ── defaults ──────────────────────────────────────────────────────────────────
+SERVER="http://10.216.149.190:5000"
+MACHINE_NAME=""
+FORCE=false
+INTERACTIVE=false
+
+# ── colours ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+
+# ── usage ─────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+
+${BOLD}delete_machine.sh${RESET} — Remove a machine from the inventory
+
+${BOLD}INTERACTIVE MODE${RESET}
+  $(basename "$0") --interactive
+
+${BOLD}FLAG MODE${RESET}
+  $(basename "$0") -m <machine_name> [-f]
+
+${BOLD}FLAGS${RESET}
+  -m  machine name        (required)
+  -f  force delete        (delete even if reserved)
+  --interactive           guided prompt mode
+  --help                  show this message
+
+${BOLD}EXAMPLES${RESET}
+  $(basename "$0") --interactive
+  $(basename "$0") -m worker-01
+  $(basename "$0") -m worker-01 -f
+
+EOF
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# ─────────────────────────────────────────────────────────────────────────────
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --interactive)  INTERACTIVE=true;  shift ;;
+            --help|-h)      usage ;;
+            -m)             MACHINE_NAME="$2";  shift 2 ;;
+            -f)             FORCE=true;         shift ;;
+            *)
+                printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
+                printf "Run with --help for usage.\n" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+ask() {
+    local var="$1"
+    local prompt="$2"
+    local current="${3:-}"
+    local value=""
+
+    if [[ -n "$current" ]]; then
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET} ${YELLOW}[%s]${RESET}: " "$prompt" "$current"
+    else
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET}: " "$prompt"
+    fi
+
+    read -r value
+    if [[ -z "$value" ]]; then
+		    value="$current"
+		fi
+    printf -v "$var" '%s' "$value"
+}
+
+ask_required() {
+    local var="$1"
+    local prompt="$2"
+    local current="${3:-}"
+
+    while true; do
+        ask "$var" "$prompt" "$current"
+        local val; eval val="\$$var"
+        local stripped="${val//[[:space:]]/}"
+        if [[ -n "$stripped" ]]; then
+				    return
+			  fi
+        printf "${RED}  ✗  This field is required.${RESET}\n"
+    done
+}
+
+ask_yes_no() {
+    # ask_yes_no <var_name> <prompt> <default: y|n>
+    local var="$1"
+    local prompt="$2"
+    local default="${3:-n}"
+    local value=""
+
+    local hint
+    if [[ "$default" == "y" ]]; then
+		    hint="Y/n" || hint="y/N"
+    fi
+
+    while true; do
+        printf "${CYAN}?${RESET} ${BOLD}%s${RESET} ${YELLOW}[%s]${RESET}: " "$prompt" "$hint"
+        read -r value
+        if [[ -z "$value" ]]; then
+				    value="$default"
+        fi
+        case "${value,,}" in
+            y|yes)  printf -v "$var" 'true';  return ;;
+            n|no)   printf -v "$var" 'false'; return ;;
+            *)      printf "${RED}  Please type y or n.${RESET}\n" ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fetch machine details from the API (for display before delete)
+# Returns non-zero if machine not found
+# ─────────────────────────────────────────────────────────────────────────────
+fetch_machine() {
+    local name="$1"
+    local response http_body http_code
+    local tmpout tmperr
+    tmpout=$(mktemp)
+    tmperr=$(mktemp)
+
+    # ── curl ──────────────────────────────────────────────────────────────────
+    if ! response=$(curl -s -w "\n%{http_code}" \
+            --connect-timeout 5 \
+            -H "Accept: application/json" \
+            "$SERVER/machines" 2>"$tmperr"); then
+        printf "${RED}Error: cannot reach server at %s${RESET}\n" "$SERVER" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    if [[ "$http_code" != "200" ]]; then
+        printf "${RED}Error: server at %s returned HTTP %s${RESET}\n" \
+               "$SERVER" "$http_code" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    set +e
+    # ── python search — write result to tmpout, exit code to tmperr ───────────
+    echo "$http_body" | python3 -c "
+import sys, json
+
+try:
+    machines = json.load(sys.stdin)
+except Exception as e:
+    sys.stderr.write(f'parse_error\n')
+    sys.exit(2)
+
+target = sys.argv[1]
+found  = next((m for m in machines if m['machine_name'] == target), None)
+
+if found is None:
+    sys.exit(1)
+
+print(json.dumps(found))
+sys.exit(0)
+" "$name" > "$tmpout" 2>"$tmperr"
+    local py_rc=$?
+    set -e
+
+    local result
+    result=$(cat "$tmpout")
+    rm -f "$tmpout" "$tmperr"
+
+    case $py_rc in
+        0)
+            MACHINE_JSON="$result"
+            return 0
+            ;;
+        1)
+            printf "${RED}Error: machine '%s' not found.${RESET}\n" "$name" >&2
+            exit 1
+            ;;
+        *)
+            printf "${RED}Error: could not parse server response.${RESET}\n" >&2
+            exit 2
+            ;;
+    esac
+}
+
+print_machine_details() {
+    echo ""
+    printf "${BOLD}${YELLOW}── Machine Details ──────────────────────────${RESET}\n"
+    echo "$MACHINE_JSON" | python3 -c "
+import sys, json
+m = json.load(sys.stdin)
+fields = [
+    ('Machine name',  'machine_name'),
+    ('Platform',      'platform_name'),
+    ('IP address',    'ip_address'),
+    ('BMC name',      'bmc_name'),
+    ('OS',            'os'),
+    ('Status',        'status'),
+    ('Reserved by',   'reserved_by'),
+    ('Description',   'description'),
+    ('Created',       'created_at'),
+    ('Updated',       'updated_at'),
+]
+for label, key in fields:
+    val = m.get(key) or '(none)'
+    print(f'  {label:<18} {val}')
+"
+    printf "${BOLD}${YELLOW}─────────────────────────────────────────────${RESET}\n"
+    echo ""
+}
+
+is_reserved() {
+    echo "$MACHINE_JSON" | python3 -c "
+import sys, json
+m = json.load(sys.stdin)
+sys.exit(0 if m.get('status') == 'reserved' else 1)
+" 2>/dev/null
+}
+
+get_reserved_by() {
+    echo "$MACHINE_JSON" | python3 -c "
+import sys, json
+m = json.load(sys.stdin)
+print(m.get('reserved_by') or '')
+" 2>/dev/null
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Core delete — calls the API
+# ─────────────────────────────────────────────────────────────────────────────
+do_delete() {
+    local url="$SERVER/machines/$MACHINE_NAME"
+    if [[ "$FORCE" == true ]]; then
+		    url="${url}?force=true"
+    fi
+
+    printf "${CYAN}  Sending DELETE request...${RESET}\n"
+
+    local response http_body http_code
+    response=$(curl -s -w "\n%{http_code}" -X DELETE "$url")
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    echo ""
+    if [[ "$http_code" == "200" ]]; then
+        printf "${GREEN}  ✓  Deleted! %s${RESET}\n\n" "$http_body"
+    elif [[ "$http_code" == "409" ]]; then
+        # machine is reserved — show a helpful message
+        printf "${YELLOW}  ⚠  Cannot delete — machine is reserved.${RESET}\n"
+        echo "$http_body" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(f\"  {d.get('error','')}\")
+    print(f\"  Hint: {d.get('hint','')}\")
+except:
+    pass
+" 2>/dev/null
+        echo ""
+        printf "  Options:\n"
+        printf "    1) Release first:  ./update_machine.sh -m %s -s available\n" "$MACHINE_NAME"
+        printf "    2) Force delete:   ./delete_machine.sh -m %s -f\n" "$MACHINE_NAME"
+        echo ""
+        exit 1
+    elif [[ "$http_code" == "404" ]]; then
+        printf "${RED}  ✗  Not found (HTTP 404): machine '%s' does not exist.${RESET}\n\n" \
+               "$MACHINE_NAME"
+        exit 1
+    else
+        printf "${RED}  ✗  Failed (HTTP %s): %s${RESET}\n\n" "$http_code" "$http_body"
+        exit 1
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Interactive mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_interactive() {
+    echo ""
+    printf "${BOLD}${RED}════════════════════════════════════════════${RESET}\n"
+    printf "${BOLD}${RED}  Delete Machine  —  %s${RESET}\n" "$SERVER"
+    printf "${BOLD}${RED}════════════════════════════════════════════${RESET}\n"
+    echo ""
+
+    # ── step 1: get machine name ──────────────────────────────────────────────
+    ask_required MACHINE_NAME "Machine name to delete" "$MACHINE_NAME"
+    echo ""
+
+    # ── step 2: look it up ───────────────────────────────────────────────────
+    printf "${CYAN}  Looking up '%s'...${RESET}\n" "$MACHINE_NAME"
+
+    fetch_machine "$MACHINE_NAME"
+		local fetch_rc=$?
+        
+		case $fetch_rc in
+        1)
+            printf "${RED}  ✗  Machine '%s' not found. Try again.${RESET}\n\n" "$MACHINE_NAME"
+            exit 1
+            ;;
+    esac
+
+    print_machine_details
+
+    # ── step 3: reserved warning ──────────────────────────────────────────────
+    if is_reserved; then
+        local reserved_by
+        reserved_by=$(get_reserved_by)
+        printf "${YELLOW}  ⚠  WARNING: This machine is currently RESERVED"
+        if [[ -n "$reserved_by" ]]; then
+				    printf " by '%s'" "$reserved_by"
+				fi
+        printf ".${RESET}\n\n"
+
+        ask_yes_no FORCE "Force delete anyway?" "n"
+
+        if [[ "$FORCE" == false ]]; then
+            echo ""
+            printf "${YELLOW}  Aborted. To release first, run:${RESET}\n"
+            printf "    ./update_machine.sh -m %s -s available\n\n" "$MACHINE_NAME"
+            exit 0
+        fi
+        echo ""
+    fi
+
+    # ── step 4: final confirmation ────────────────────────────────────────────
+    printf "${RED}  This action CANNOT be undone.${RESET}\n"
+
+    local CONFIRMED
+    ask_yes_no CONFIRMED "Delete machine '$MACHINE_NAME'?" "n"
+
+    if [[ "$CONFIRMED" == false ]]; then
+        printf "${YELLOW}  Aborted. Nothing was deleted.${RESET}\n\n"
+        exit 0
+    fi
+
+    echo ""
+    do_delete
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Flag mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_flag_mode() {
+    # ── validate ──────────────────────────────────────────────────────────────
+    if [[ -z "$MACHINE_NAME" ]]; then
+        printf "${RED}Error: -m machine_name is required.${RESET}\n"
+        printf "Run with --help for usage.\n"
+        exit 1
+    fi
+
+    # ── look up the machine ───────────────────────────────────────────────────
+    printf "${CYAN}  Looking up '%s'...${RESET}\n" "$MACHINE_NAME"
+
+    fetch_machine "$MACHINE_NAME"
+		local fetch_rc=$?
+        
+		case $fetch_rc in
+        1)
+            printf "${RED}  ✗  Machine '%s' not found. Try again.${RESET}\n\n" "$MACHINE_NAME"
+            exit 1
+            ;;
+    esac
+
+    print_machine_details
+
+    # ── reserved warning in flag mode ─────────────────────────────────────────
+    if is_reserved && [[ "$FORCE" == false ]]; then
+        local reserved_by
+        reserved_by=$(get_reserved_by)
+        printf "${YELLOW}  ⚠  Machine is RESERVED"
+        if [[ -n "$reserved_by" ]]; then
+				    printf " by '%s'" "$reserved_by"
+				fi
+        printf ". Use -f to force delete.${RESET}\n\n"
+        printf "  Example: ./delete_machine.sh -m %s -f\n\n" "$MACHINE_NAME"
+        exit 1
+    fi
+
+    # ── confirm in flag mode (unless running non-interactively) ───────────────
+    if [[ -t 0 ]]; then
+        # stdin is a terminal — ask for confirmation
+        printf "${RED}  This action CANNOT be undone.${RESET}\n"
+        local CONFIRMED
+        ask_yes_no CONFIRMED "Delete machine '$MACHINE_NAME'?" "n"
+        if [[ "$CONFIRMED" == false ]]; then
+            printf "${YELLOW}  Aborted.${RESET}\n\n"
+            exit 0
+        fi
+        echo ""
+    fi
+
+    do_delete
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────────────────
+main() {
+    if [[ $# -eq 0 ]]; then
+		    usage
+		fi
+
+    parse_args "$@"
+
+    if [[ "$INTERACTIVE" == true ]]; then
+        run_interactive
+    else
+        run_flag_mode
+    fi
+}
+
+main "$@"

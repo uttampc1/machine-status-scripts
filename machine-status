@@ -60,11 +60,13 @@ show_green() {
   printf "======================================================================${RESET}\n"
 }
 
-if [ "$PROGNAME" == "machine-reserve" ]; then
+make_reservation() {
+	local uname=$1
   username=$USER
-  if [ "x${1}" != "x" ]; then
-    username=$1
+  if [ "x${uname}" != "x" ]; then
+    username=$uname
   fi
+
   if [ -f $TARGET_MSG ]; then
     x=`grep "Reserved by" $TARGET_MSG`
     if [ "x${x}" != "x" ]; then
@@ -123,11 +125,24 @@ if [ "$PROGNAME" == "machine-reserve" ]; then
   wall "INFO: Use machine-status command to see the latest status."
   echo "$DATE:Reserved by $username" >> /var/log/machine-status.log
   show_red "${username}: Machine is now reserved for you!" " ${DATE}"
-elif [ "$PROGNAME" == "machine-release" ]; then
-  username=$USER
-  if [ "x${1}" != "x" ]; then
-    username=$1
+
+	# Update the global database
+	machine_name=`hostname`
+	if update_machine_status -m ${machine_name} -s reserved -r ${username} --quiet; then
+    echo "$DATE: Database updated with the reservation."
+    echo "INFO: Verify database entry using show_machine or list_machines commands"
+	else
+    echo "${DATE}: Database update request failed"
   fi
+}
+
+release_reservation() {
+	local uname=$1
+  username=$USER
+  if [ "x${uname}" != "x" ]; then
+    username=$uname
+  fi
+
   if [ -f $TARGET_MSG ]; then
     x=`grep "Reserved by" $TARGET_MSG`
     if [ "x${x}" != "x" ]; then
@@ -184,12 +199,21 @@ elif [ "$PROGNAME" == "machine-release" ]; then
     fi
   fi
   sed -e "s/STATUS/Available/g" -e "s/DATE/Date: $DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
+  wall "INFO: Machine is available."
   show_green " ${DATE}"
   echo "$DATE:Released" >> /var/log/machine-status.log
-elif [ "$PROGNAME" == "machine-report" ]; then
-  tail -n 25 /var/log/machine-status.log
-  exit
-else
+
+	# Update the global database
+	machine_name=`hostname`
+	if update_machine_status -m ${machine_name} -s "available" --quiet; then
+    echo "$DATE: Database updated"
+    echo "INFO: Verify database entry using show_machine or list_machines commands"
+	else
+    echo "${DATE}: Database update request failed"
+	fi
+}
+
+show_machine_status() {
   dt=`grep "Date: " $TARGET_MSG | cut -d':' -f2-`
   x=`grep "Reserved by" $TARGET_MSG`
   if [ "x${x}" != "x" ]; then
@@ -198,5 +222,20 @@ else
   else
     show_green "${dt}"
   fi
+}
+
+report_reservations() {
+  tail -n 25 /var/log/machine-status.log
+  exit
+}
+
+if [ "$PROGNAME" == "machine-reserve" ]; then
+  make_reservation $1
+elif [ "$PROGNAME" == "machine-release" ]; then
+  release_reservation $1
+elif [ "$PROGNAME" == "machine-report" ]; then
+  report_reservations
+else
+  show_machine_status
 fi
 echo

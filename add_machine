@@ -1,0 +1,298 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# add_machine  —  Register a new machine
+#
+# Usage:
+#   Interactive:   ./add_machine.sh --interactive
+#   One-liner:     ./add_machine.sh -m worker-01 -p x86_64 [options]
+#
+# Options:
+#   -m  machine name      (required)
+#   -p  platform          (required)
+#   -i  IP address
+#   -b  BMC name
+#   -o  OS name
+#   -d  description
+#   --interactive         guided prompt mode
+#   --help
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+# ── defaults ──────────────────────────────────────────────────────────────────
+SERVER="http://10.216.149.190:5000"
+MACHINE_NAME=""
+PLATFORM_NAME=""
+IP_ADDRESS=""
+BMC_NAME=""
+OS=""
+DESCRIPTION=""
+INTERACTIVE=false
+
+# ── colours ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+
+# ── usage ─────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+
+${BOLD}add_machine.sh${RESET} — Register a new machine in the inventory
+
+${BOLD}INTERACTIVE MODE${RESET}
+  $(basename "$0") --interactive
+
+${BOLD}FLAG MODE${RESET}
+  $(basename "$0") -m <machine> -p <platform> [options]
+
+${BOLD}FLAGS${RESET}
+  -m  machine name        (required)
+  -p  platform            (required)
+  -i  IP address
+  -b  BMC name
+  -o  OS name
+  -d  description
+  --interactive           guided prompt mode
+  --help                  show this message
+
+${BOLD}EXAMPLES${RESET}
+  $(basename "$0") --interactive
+  $(basename "$0") -m worker-01 -p x86_64
+  $(basename "$0") -m worker-02 -p aarch64 -i 10.0.1.42 -o "RHEL 9.3"
+
+EOF
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# Handles both --long and -s short flags, in any order
+# ─────────────────────────────────────────────────────────────────────────────
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --interactive)  INTERACTIVE=true;     shift ;;
+            --help|-h)      usage ;;
+            -m)             MACHINE_NAME="$2";     shift 2 ;;
+            -p)             PLATFORM_NAME="$2";    shift 2 ;;
+            -i)             IP_ADDRESS="$2";       shift 2 ;;
+            -b)             BMC_NAME="$2";         shift 2 ;;
+            -o)             OS="$2";               shift 2 ;;
+            -d)             DESCRIPTION="$2";      shift 2 ;;
+            *)
+                printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
+                printf "Run with --help for usage.\n" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompt helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ask <var_name> <prompt> [current_value]
+# Prints current value as default; Enter keeps it.
+ask() {
+    local var="$1"
+    local prompt="$2"
+    local current="$3"
+    local value=""
+
+    if [[ -n "$current" ]]; then
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET} ${YELLOW}[%s]${RESET}: " "$prompt" "$current"
+    else
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET}: " "$prompt"
+    fi
+
+    read -r value
+    # keep current/default if user just pressed Enter
+    if [[ -z "$value" ]]; then
+		    value="$current"
+		fi
+    printf -v "$var" '%s' "$value"
+}
+
+# ask_required <var_name> <prompt> [current_value]
+# Loops until user enters a non-blank value.
+ask_required() {
+    local var="$1"
+    local prompt="$2"
+    local current="$3"
+
+    while true; do
+        ask "$var" "$prompt" "$current"
+        local val; eval val="\$$var"
+        local stripped="${val//[[:space:]]/}"
+        if [[ -n "$stripped" ]]; then
+				    return
+				fi
+        printf "${RED}  ✗  This field is required.${RESET}\n"
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Interactive mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_interactive() {
+    echo ""
+    printf "${BOLD}${GREEN}════════════════════════════════════════════${RESET}\n"
+    printf "${BOLD}${GREEN}  Machine Registration  —  %s${RESET}\n" "$SERVER"
+    printf "${BOLD}${GREEN}════════════════════════════════════════════${RESET}\n"
+    printf "  ${YELLOW}Required fields are marked *.${RESET}\n"
+    printf "  ${YELLOW}Press Enter to skip optional fields.${RESET}\n"
+    echo ""
+
+    ask_required MACHINE_NAME  "* Machine name  (e.g. worker-01)"  "$MACHINE_NAME"
+    ask_required PLATFORM_NAME "* Platform      (e.g. x86_64)"     "$PLATFORM_NAME"
+    ask          IP_ADDRESS    "  IP address"                       "$IP_ADDRESS"
+    ask          BMC_NAME      "  BMC name"                         "$BMC_NAME"
+    ask          OS            "  Operating system"                 "$OS"
+    ask          DESCRIPTION   "  Description"                      "$DESCRIPTION"
+
+    print_summary
+
+    # ── confirm / edit / abort loop ───────────────────────────────────────────
+    while true; do
+        printf "${CYAN}?${RESET} ${BOLD}Submit? [Y/n/edit]${RESET}: "
+        read -r CONFIRM
+        case "${CONFIRM,,}" in
+            ""|y|yes)   break ;;
+            n|no|q)
+                printf "${YELLOW}  Aborted. Nothing was sent.${RESET}\n\n"
+                exit 0
+                ;;
+            e|edit)
+                echo ""
+                printf "${YELLOW}  Re-entering details (current values shown as defaults)...${RESET}\n\n"
+                ask_required MACHINE_NAME  "* Machine name"     "$MACHINE_NAME"
+                ask_required PLATFORM_NAME "* Platform"         "$PLATFORM_NAME"
+                ask          IP_ADDRESS    "  IP address"       "$IP_ADDRESS"
+                ask          BMC_NAME      "  BMC name"         "$BMC_NAME"
+                ask          OS            "  Operating system" "$OS"
+                ask          DESCRIPTION   "  Description"      "$DESCRIPTION"
+                print_summary
+                ;;
+            *)
+                printf "${RED}  Please type y, n, or edit.${RESET}\n"
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Flag mode validation
+# ─────────────────────────────────────────────────────────────────────────────
+run_flag_mode() {
+    local errors=()
+
+    if [[ -z "$MACHINE_NAME"  ]]; then
+		    errors+=("  -m machine name is required")
+		fi
+    if [[ -z "$PLATFORM_NAME" ]]; then
+		    errors+=("  -p platform is required")
+		fi
+
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        printf "${RED}Error — missing required flags:${RESET}\n"
+        printf '%s\n' "${errors[@]}"
+        printf "Run with --help for usage.\n"
+        exit 1
+    fi
+
+    print_summary
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Summary table
+# ─────────────────────────────────────────────────────────────────────────────
+print_summary() {
+    echo ""
+    printf "${BOLD}${YELLOW}── Summary ──────────────────────────────────${RESET}\n"
+    printf "  ${BOLD}%-18s${RESET} %s\n" "Machine name:"   "$MACHINE_NAME"
+    printf "  ${BOLD}%-18s${RESET} %s\n" "Platform:"       "$PLATFORM_NAME"
+    printf "  ${BOLD}%-18s${RESET} %s\n" "IP address:"     "${IP_ADDRESS:-(none)}"
+    printf "  ${BOLD}%-18s${RESET} %s\n" "BMC name:"       "${BMC_NAME:-(none)}"
+    printf "  ${BOLD}%-18s${RESET} %s\n" "OS:"             "${OS:-(none)}"
+    printf "  ${BOLD}%-18s${RESET} %s\n" "Description:"    "${DESCRIPTION:-(none)}"
+    printf "  ${BOLD}%-18s${RESET} %s\n" "Backend Server:" "$SERVER"
+    printf "${BOLD}${YELLOW}─────────────────────────────────────────────${RESET}\n"
+    echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JSON helper  —  escape a value; emit "null" for empty strings
+# ─────────────────────────────────────────────────────────────────────────────
+json_val() {
+    local v="$1"
+    local stripped="${v//[[:space:]]/}"
+    if [[ -z "$stripped" ]]; then
+        printf 'null'
+    else
+        v="${v//\\/\\\\}"
+        v="${v//\"/\\\"}"
+        printf '"%s"' "$v"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Submit to API
+# ─────────────────────────────────────────────────────────────────────────────
+submit() {
+    local payload
+    payload=$(printf '{
+  "machine_name":  %s,
+  "platform_name": %s,
+  "ip_address":    %s,
+  "bmc_name":      %s,
+  "os":            %s,
+  "description":   %s
+}' \
+        "$(json_val "$MACHINE_NAME")" \
+        "$(json_val "$PLATFORM_NAME")" \
+        "$(json_val "$IP_ADDRESS")" \
+        "$(json_val "$BMC_NAME")" \
+        "$(json_val "$OS")" \
+        "$(json_val "$DESCRIPTION")")
+
+    printf "${CYAN}  Submitting to %s ...${RESET}\n" "$SERVER"
+
+    local response http_body http_code
+    response=$(curl -s -w "\n%{http_code}" \
+        -X POST "$SERVER/machines" \
+        -H "Content-Type: application/json" \
+        -d "$payload")
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    if [[ "$http_code" == "201" ]]; then
+        printf "${GREEN}  ✓  Registered! %s${RESET}\n\n" "$http_body"
+    else
+        printf "${RED}  ✗  Failed (HTTP %s): %s${RESET}\n\n" "$http_code" "$http_body"
+        exit 1
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────────────────
+main() {
+    # show usage if called with no arguments at all
+    if [[ $# -eq 0 ]]; then
+		   usage
+		fi
+
+    parse_args "$@"
+
+    if [[ "$INTERACTIVE" == true ]]; then
+        run_interactive
+    else
+        run_flag_mode
+    fi
+
+    submit
+}
+
+main "$@"

@@ -1,0 +1,508 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# update_machine_status  —  Reserve or release a machine
+#
+# Usage:
+#   Interactive:  ./update_machine_status.sh --interactive
+#   Flag mode:    ./update_machine_status.sh -m worker-01 -s reserved -r alice
+#                 ./update_machine_status.sh -m worker-01 -s available
+#   Quiet mode:   ./update_machine_status.sh -m worker-01 -s available --quiet
+#
+# Flags:
+#   -m  machine name              (required)
+#   -s  status                    (required: available | reserved)
+#   -r  reserved_by               (required when -s reserved)
+#   -y / --yes / --quiet / -q     no output, no confirmation, returns exit code
+#   --interactive
+#   --help
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+SERVER="http://10.216.149.190:5000"
+
+MACHINE_NAME=""
+NEW_STATUS=""
+NEW_RESERVED_BY=""
+INTERACTIVE=false
+QUIET=false
+
+RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Output helpers — suppressed when QUIET=true
+# ─────────────────────────────────────────────────────────────────────────────
+say() {
+    if [[ "$QUIET" == false ]]; then
+	      printf "$@" || true
+    fi
+}
+sayln() {
+    if [[ "$QUIET" == false ]]; then
+		    echo "$@" || true
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+
+${BOLD}update_machine_status.sh${RESET} — Reserve or release a machine
+Server: ${SERVER}
+
+${BOLD}INTERACTIVE MODE${RESET}
+  $(basename "$0") --interactive
+
+${BOLD}FLAG MODE${RESET}
+  $(basename "$0") -m <machine> -s reserved -r <user>
+  $(basename "$0") -m <machine> -s available
+
+${BOLD}FLAGS${RESET}
+  -m  machine name              (required)
+  -s  status                    (required: available | reserved)
+  -r  reserved_by               (required when -s reserved)
+  -y / --yes / --quiet / -q     no output — return exit code only
+                                  0 = success,  1 = failure
+  --interactive
+  --help
+
+${BOLD}EXAMPLES${RESET}
+  $(basename "$0") --interactive
+
+  $(basename "$0") -m worker-01 -s reserved -r alice
+  $(basename "$0") -m worker-01 -s available
+
+  # quiet / batch — no output, check exit code
+  $(basename "$0") -m worker-01 -s reserved -r alice --quiet && echo "ok"
+  $(basename "$0") -m worker-01 -s available -q
+
+EOF
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# ─────────────────────────────────────────────────────────────────────────────
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --interactive)          INTERACTIVE=true;       shift ;;
+            --quiet|--yes|-y|-q)    QUIET=true;             shift ;;
+            --help|-h)              usage ;;
+            -m)                     MACHINE_NAME="$2";      shift 2 ;;
+            -s)                     NEW_STATUS="$2";        shift 2 ;;
+            -r)                     NEW_RESERVED_BY="$2";   shift 2 ;;
+            *)
+                printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
+                printf "Run with --help for usage.\n" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompt helpers (interactive mode only)
+# ─────────────────────────────────────────────────────────────────────────────
+ask() {
+    local var="$1" prompt="$2" current="${3:-}" value=""
+    if [[ -n "$current" ]]; then
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET} ${YELLOW}[%s]${RESET}: " \
+               "$prompt" "$current"
+    else
+        printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET}: " "$prompt"
+    fi
+    read -r value
+    if [[ -z "$value" ]]; then
+		    value="$current"
+		fi
+    printf -v "$var" '%s' "$value"
+}
+
+ask_required() {
+    local var="$1" prompt="$2" current="${3:-}"
+    while true; do
+        ask "$var" "$prompt" "$current"
+        local val; eval val="\$$var"
+        local stripped="${val//[[:space:]]/}"
+        if [[ -n "$stripped" ]]; then
+				    return
+				fi
+        printf "${RED}  ✗  This field is required.${RESET}\n"
+    done
+}
+
+ask_status_choice() {
+    local current_status="${1:-}" current_reserved_by="${2:-}"
+
+    echo ""
+    printf "${CYAN}?${RESET} ${BOLD}New status${RESET}\n"
+    printf "    ${YELLOW}1)${RESET} available\n"
+    printf "    ${YELLOW}2)${RESET} reserved\n"
+    printf "  Choice: "
+
+    local choice=""
+    while true; do
+        read -r choice
+        case "$choice" in
+            1)
+                NEW_STATUS="available"
+                NEW_RESERVED_BY=""
+                printf "  ${GREEN}→ Will set status to 'available' (reserved_by cleared).${RESET}\n"
+                return
+                ;;
+            2)
+                NEW_STATUS="reserved"
+                echo ""
+                while true; do
+                    ask NEW_RESERVED_BY "Reserved by" "$current_reserved_by"
+                    local stripped="${NEW_RESERVED_BY//[[:space:]]/}"
+                    if [[ -n "$stripped" ]]; then
+										    return
+										fi
+                    printf "${RED}  ✗  reserved_by is required when reserving.${RESET}\n"
+                done
+                ;;
+            *)
+                printf "${RED}  Please enter 1 or 2: ${RESET}"
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# fetch_machine <name>
+#
+# On success:  sets MACHINE_JSON, returns 0
+# On failure:  prints error to stderr and EXITS the script
+#              (never returns to caller with an error code)
+# ─────────────────────────────────────────────────────────────────────────────
+fetch_machine() {
+    local name="$1"
+    local response http_body http_code
+    local tmpout tmperr
+    tmpout=$(mktemp)
+    tmperr=$(mktemp)
+
+    # ── curl ──────────────────────────────────────────────────────────────────
+    if ! response=$(curl -s -w "\n%{http_code}" \
+            --connect-timeout 5 \
+            -H "Accept: application/json" \
+            "$SERVER/machines" 2>"$tmperr"); then
+        printf "${RED}Error: cannot reach server at %s${RESET}\n" "$SERVER" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    if [[ "$http_code" != "200" ]]; then
+        printf "${RED}Error: server at %s returned HTTP %s${RESET}\n" \
+               "$SERVER" "$http_code" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    set +e
+    # ── python search — write result to tmpout, exit code to tmperr ───────────
+    echo "$http_body" | python3 -c "
+import sys, json
+
+try:
+    machines = json.load(sys.stdin)
+except Exception as e:
+    sys.stderr.write(f'parse_error\n')
+    sys.exit(2)
+
+target = sys.argv[1]
+found  = next((m for m in machines if m['machine_name'] == target), None)
+
+if found is None:
+    sys.exit(1)
+
+print(json.dumps(found))
+sys.exit(0)
+" "$name" > "$tmpout" 2>"$tmperr"
+    local py_rc=$?
+    set -e
+
+    local result
+    result=$(cat "$tmpout")
+    rm -f "$tmpout" "$tmperr"
+
+    case $py_rc in
+        0)
+            MACHINE_JSON="$result"
+            return 0
+            ;;
+        1)
+            printf "${RED}Error: machine '%s' not found.${RESET}\n" "$name" >&2
+            exit 1
+            ;;
+        *)
+            printf "${RED}Error: could not parse server response.${RESET}\n" >&2
+            exit 2
+            ;;
+    esac
+}
+
+get_field() {
+    local field="$1"
+    echo "$MACHINE_JSON" | python3 -c "
+import sys, json
+m = json.load(sys.stdin)
+val = m.get('$field')
+print(val if val is not None else '')
+" 2>/dev/null
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Validate status inputs — exits on error
+# ─────────────────────────────────────────────────────────────────────────────
+validate_status_inputs() {
+    if [[ "$NEW_STATUS" != "available" && "$NEW_STATUS" != "reserved" ]]; then
+        printf "${RED}Error: -s must be 'available' or 'reserved'.${RESET}\n" >&2
+        exit 1
+    fi
+    if [[ "$NEW_STATUS" == "reserved" ]]; then
+        local stripped="${NEW_RESERVED_BY//[[:space:]]/}"
+        if [[ -z "$stripped" ]]; then
+            printf "${RED}Error: -r reserved_by is required when -s reserved.${RESET}\n" >&2
+            exit 1
+        fi
+    fi
+    # always clear reserved_by when releasing
+    if [[ "$NEW_STATUS" == "available" ]]; then
+		  NEW_RESERVED_BY=""
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Print summary (suppressed in quiet mode)
+# ─────────────────────────────────────────────────────────────────────────────
+print_status_summary() {
+    if [[ "$QUIET" == true ]]; then
+		    return
+    fi
+
+    local current_status; current_status=$(get_field status)
+    local current_rb;     current_rb=$(get_field reserved_by)
+
+    echo ""
+    printf "${BOLD}${YELLOW}── Status Change ────────────────────────────${RESET}\n"
+    printf "  ${BOLD}%-18s${RESET} %s\n"                 "Machine:"        "$(get_field machine_name)"
+    printf "  ${BOLD}%-18s${RESET} ${RED}%s${RESET}\n"   "Current status:" "${current_status:-(none)}"
+    printf "  ${BOLD}%-18s${RESET} ${GREEN}%s${RESET}\n" "New status:"     "$NEW_STATUS"
+
+    if [[ "$NEW_STATUS" == "reserved" ]]; then
+        printf "  ${BOLD}%-18s${RESET} ${GREEN}%s${RESET}\n" "Reserved by:" "$NEW_RESERVED_BY"
+    elif [[ "$NEW_STATUS" == "available" && -n "$current_rb" ]]; then
+        printf "  ${BOLD}%-18s${RESET} ${RED}%s${RESET}  →  ${GREEN}(cleared)${RESET}\n" \
+               "Reserved by:" "$current_rb"
+    fi
+
+    printf "${BOLD}${YELLOW}─────────────────────────────────────────────${RESET}\n"
+    echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Confirmation prompt
+# In quiet mode  → skip, proceed automatically
+# In normal mode → ask user
+# ─────────────────────────────────────────────────────────────────────────────
+ask_confirm() {
+    # quiet mode — no prompt, just proceed
+    if [[ "$QUIET" == true ]]; then
+		    return 0
+    fi
+    while true; do
+        printf "${CYAN}?${RESET} ${BOLD}Apply this change? [Y/n]${RESET}: "
+        local ans=""
+        read -r ans
+        if [[ -z "$ans" ]]; then
+				    ans="y"
+				fi
+        case "${ans,,}" in
+            y|yes)
+                echo ""
+                return 0
+                ;;
+            n|no)
+                printf "${YELLOW}  Aborted. Nothing was changed.${RESET}\n\n"
+                exit 0
+                ;;
+            *)
+                printf "${RED}  Please type y or n.${RESET}\n"
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Build JSON payload
+# ─────────────────────────────────────────────────────────────────────────────
+json_val() {
+    local v="$1"
+    local stripped="${v//[[:space:]]/}"
+    if [[ -z "$stripped" ]]; then printf 'null'; return; fi
+    v="${v//\\/\\\\}"; v="${v//\"/\\\"}"
+    printf '"%s"' "$v"
+}
+
+build_payload() {
+    if [[ "$NEW_STATUS" == "reserved" ]]; then
+        printf '{ "status": %s, "reserved_by": %s }' \
+            "$(json_val "$NEW_STATUS")" \
+            "$(json_val "$NEW_RESERVED_BY")"
+    else
+        printf '{ "status": %s, "reserved_by": null }' \
+            "$(json_val "$NEW_STATUS")"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Submit PUT request — always called as the final step
+# ─────────────────────────────────────────────────────────────────────────────
+do_update() {
+    local payload
+    payload=$(build_payload)
+
+    local response http_body http_code
+    response=$(curl -s -w "\n%{http_code}" \
+        -X PUT "$SERVER/machines/$MACHINE_NAME" \
+        -H "Content-Type: application/json" \
+        -d "$payload")
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    if [[ "$http_code" == "200" ]]; then
+        say "${GREEN}  ✓  Status updated successfully.${RESET}\n\n"
+        return 0
+    else
+        # errors always go to stderr, even in quiet mode
+        printf "${RED}Error (HTTP %s): %s${RESET}\n" "$http_code" "$http_body" >&2
+        return 1
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Interactive mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_interactive() {
+    echo ""
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    printf "${BOLD}${CYAN}  Update Machine Status  —  %s${RESET}\n" "$SERVER"
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    echo ""
+
+    # find machine
+    while true; do
+        ask_required MACHINE_NAME "Machine name" "$MACHINE_NAME"
+        printf "${CYAN}  Looking up '%s'...${RESET}\n" "$MACHINE_NAME"
+        fetch_machine "$MACHINE_NAME"
+				local fetch_rc=$?
+        
+				case $fetch_rc in
+            0)  
+						    break
+								;;    # found — exit the loop
+            1)
+                printf "${RED}  ✗  Machine '%s' not found. Try again.${RESET}\n\n" \
+                       "$MACHINE_NAME" >&2
+                MACHINE_NAME=""
+                ;;
+            2)
+                printf "${RED}  ✗  Could not reach server at %s${RESET}\n\n" \
+                       "$SERVER" >&2
+                exit 2    # no point retrying -- Backend server is down
+                ;;
+        esac
+    done
+
+    ask_status_choice "$(get_field status)" "$(get_field reserved_by)"
+
+    validate_status_inputs
+    print_status_summary
+    ask_confirm
+    do_update
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Flag mode
+#
+# Steps (in order, no conditional gates around do_update):
+#   1. validate required flags (-m and -s present)
+#   2. validate status rules   (reserved needs -r, available clears reserved_by)
+#   3. fetch machine           (verify it exists)
+#   4. print summary           (skipped if --quiet)
+#   5. ask confirmation        (skipped if --quiet, proceeds automatically)
+#   6. do_update               (ALWAYS the final step)
+# ─────────────────────────────────────────────────────────────────────────────
+run_flag_mode() {
+    # ── step 1: require -m and -s ─────────────────────────────────────────────
+    local errors=()
+    if [[ -z "$MACHINE_NAME" ]]; then
+		    errors+=("  -m machine name is required")
+		fi
+    if [[ -z "$NEW_STATUS"   ]]; then
+		    errors+=("  -s status is required (available | reserved)")
+		fi
+
+    if [[ ${#errors[@]} -gt 0 ]]; then
+        printf "${RED}Error — missing required flags:${RESET}\n" >&2
+        printf '%s\n' "${errors[@]}" >&2
+        printf "Run with --help for usage.\n" >&2
+        exit 1
+    fi
+
+    # ── step 2: validate status rules ────────────────────────────────────────
+    validate_status_inputs
+
+    # ── step 3: verify machine exists ────────────────────────────────────────
+    say "${CYAN}  Looking up '%s'...${RESET}\n" "$MACHINE_NAME"
+		fetch_machine "$MACHINE_NAME"
+    local fetch_rc=$?
+    
+    case $fetch_rc in
+        1)
+            printf "${RED}Error: machine '%s' not found.${RESET}\n" \
+                   "$MACHINE_NAME" >&2
+            exit 1
+            ;;
+        2)
+            printf "${RED}Error: server unreachable at %s${RESET}\n" \
+                   "$SERVER" >&2
+            exit 2
+            ;;
+    esac
+
+    # ── step 4: print summary ─────────────────────────────────────────────────
+    print_status_summary
+
+    # ── step 5: confirm ───────────────────────────────────────────────────────
+    ask_confirm
+
+    # ── step 6: update ────────────────────────────────────────────────────────
+    do_update
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────────────────
+main() {
+    if [[ $# -eq 0 ]]; then
+		    usage
+    fi
+    parse_args "$@"
+
+    if [[ "$INTERACTIVE" == true ]]; then
+        run_interactive
+    else
+        run_flag_mode
+    fi
+}
+
+main "$@"

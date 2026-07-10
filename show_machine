@@ -1,0 +1,305 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# show_machine  —  Show all details of a single machine
+#
+# Usage:
+#   ./show_machine.sh -m <machine_name>
+#   ./show_machine.sh --interactive
+#   ./show_machine.sh --help
+#
+# Flags:
+#   -m  machine name      (required)
+#   --interactive         prompt for machine name
+#   --help
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+# ── SERVER — edit this to point at your inventory server ──────────────────────
+SERVER="http://10.216.149.190:5000"
+
+# ── defaults ──────────────────────────────────────────────────────────────────
+MACHINE_NAME=""
+INTERACTIVE=false
+
+# ── colours ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+
+# ── usage ─────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+
+${BOLD}show_machine.sh${RESET} — Show full details of a single machine
+Server: ${SERVER}
+
+${BOLD}USAGE${RESET}
+  $(basename "$0") -m <machine_name>
+  $(basename "$0") --interactive
+
+${BOLD}FLAGS${RESET}
+  -m  machine name      (required)
+  --interactive         prompt for machine name
+  --help
+
+${BOLD}EXAMPLES${RESET}
+  $(basename "$0") -m worker-01
+  $(basename "$0") --interactive
+
+EOF
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# ─────────────────────────────────────────────────────────────────────────────
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --interactive)  INTERACTIVE=true;      shift ;;
+            --help|-h)      usage ;;
+            -m)             MACHINE_NAME="$2";     shift 2 ;;
+            *)
+                printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
+                printf "Run with --help for usage.\n" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prompt helper
+# ─────────────────────────────────────────────────────────────────────────────
+ask_required() {
+    local var="$1"
+    local prompt="$2"
+    local current="${3:-}"
+
+    while true; do
+        if [[ -n "$current" ]]; then
+            printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET} ${YELLOW}[%s]${RESET}: " \
+                   "$prompt" "$current"
+        else
+            printf "${CYAN}?${RESET} ${BOLD}%-30s${RESET}: " "$prompt"
+        fi
+
+        local value=""
+        read -r value
+        if [[ -z "$value" ]]; then
+				    value="$current"
+				fi
+
+        local stripped="${value//[[:space:]]/}"
+        if [[ -n "$stripped" ]]; then
+            printf -v "$var" '%s' "$value"
+            return
+        fi
+        printf "${RED}  ✗  This field is required.${RESET}\n"
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fetch single machine by name from the list endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+fetch_machine() {
+    local name="$1"
+    local response http_body http_code
+    local tmpout tmperr
+    tmpout=$(mktemp)
+    tmperr=$(mktemp)
+
+    # ── curl ──────────────────────────────────────────────────────────────────
+    if ! response=$(curl -s -w "\n%{http_code}" \
+            --connect-timeout 5 \
+            -H "Accept: application/json" \
+            "$SERVER/machines" 2>"$tmperr"); then
+        printf "${RED}Error: cannot reach server at %s${RESET}\n" "$SERVER" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    if [[ "$http_code" != "200" ]]; then
+        printf "${RED}Error: server at %s returned HTTP %s${RESET}\n" \
+               "$SERVER" "$http_code" >&2
+        rm -f "$tmpout" "$tmperr"
+        exit 2
+    fi
+
+    set +e
+    # ── python search — write result to tmpout, exit code to tmperr ───────────
+    echo "$http_body" | python3 -c "
+import sys, json
+
+try:
+    machines = json.load(sys.stdin)
+except Exception as e:
+    sys.stderr.write(f'parse_error\n')
+    sys.exit(2)
+
+target = sys.argv[1]
+found  = next((m for m in machines if m['machine_name'] == target), None)
+
+if found is None:
+    sys.exit(1)
+
+print(json.dumps(found))
+sys.exit(0)
+" "$name" > "$tmpout" 2>"$tmperr"
+    local py_rc=$?
+    set -e
+
+    local result
+    result=$(cat "$tmpout")
+    rm -f "$tmpout" "$tmperr"
+
+    case $py_rc in
+        0)
+            MACHINE_JSON="$result"
+            return 0
+            ;;
+        1)
+            printf "${RED}Error: machine '%s' not found.${RESET}\n" "$name" >&2
+            exit 1
+            ;;
+        *)
+            printf "${RED}Error: could not parse server response.${RESET}\n" >&2
+            exit 2
+            ;;
+    esac
+}
+# ─────────────────────────────────────────────────────────────────────────────
+# Pretty-print the machine record
+# ─────────────────────────────────────────────────────────────────────────────
+print_machine() {
+    echo ""
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    printf "${BOLD}${CYAN}  Machine Details${RESET}\n"
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+
+    echo "$MACHINE_JSON" | python3 -c "
+import sys, json, os
+
+m = json.load(sys.stdin)
+
+BOLD  = '\033[1m'
+GREEN = '\033[0;32m'
+YEL   = '\033[1;33m'
+RED   = '\033[0;31m'
+CYAN  = '\033[0;36m'
+RST   = '\033[0m'
+
+def val(v):
+    return str(v) if v is not None else ''
+
+def row(label, value, colour=''):
+    display = val(value) or f'{YEL}(none){RST}'
+    print(f'  {BOLD}{label:<18}{RST} {colour}{display}{RST}')
+
+# ── identity ──────────────────────────────────────────────────────────────────
+row('Machine name:',  m.get('machine_name'),  BOLD)
+row('Platform:',      m.get('platform_name'))
+row('IP address:',    m.get('ip_address'),    CYAN)
+row('BMC name:',      m.get('bmc_name'),      CYAN)
+row('OS:',            m.get('os'))
+row('Description:',   m.get('description'))
+
+# ── status ────────────────────────────────────────────────────────────────────
+print()
+status = m.get('status', '')
+if status == 'available':
+    row('Status:', status, GREEN)
+elif status == 'reserved':
+    row('Status:', status, YEL)
+    row('Reserved by:', m.get('reserved_by'), YEL)
+else:
+    row('Status:', status)
+
+# ── timestamps ────────────────────────────────────────────────────────────────
+print()
+row('Created:',  m.get('created_at'))
+row('Updated:',  m.get('updated_at'))
+"
+
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    echo ""
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Interactive mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_interactive() {
+    echo ""
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    printf "${BOLD}${CYAN}  Show Machine  —  %s${RESET}\n" "$SERVER"
+    printf "${BOLD}${CYAN}════════════════════════════════════════════${RESET}\n"
+    echo ""
+
+    while true; do
+        ask_required MACHINE_NAME "Machine name" "$MACHINE_NAME"
+
+        printf "${CYAN}  Looking up '%s'...${RESET}\n" "$MACHINE_NAME"
+
+        fetch_machine "$MACHINE_NAME"
+				local fetch_rc=$?
+        
+				case $fetch_rc in
+            0)  
+						    break
+								;;    # found — exit the loop
+            1)
+                printf "${RED}  ✗  Machine '%s' not found. Try again.${RESET}\n\n" \
+                       "$MACHINE_NAME" >&2
+                MACHINE_NAME=""
+                ;;
+        esac
+    done
+
+    print_machine
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Flag mode
+# ─────────────────────────────────────────────────────────────────────────────
+run_flag_mode() {
+    if [[ -z "$MACHINE_NAME" ]]; then
+        printf "${RED}Error: -m machine_name is required.${RESET}\n"
+        printf "Run with --help for usage.\n"
+        exit 1
+    fi
+
+    printf "${CYAN}  Looking up '%s'...${RESET}\n" "$MACHINE_NAME"
+
+    fetch_machine "$MACHINE_NAME"
+		local fetch_rc=$?
+        
+		case $fetch_rc in
+		    1)
+            printf "${RED}  ✗  Machine '%s' not found.${RESET}\n\n" "$MACHINE_NAME"
+            exit 1
+    esac
+
+    print_machine
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────────────────
+main() {
+    if [[ $# -eq 0 ]]; then
+		    usage
+		fi
+
+    parse_args "$@"
+
+    if [[ "$INTERACTIVE" == true ]]; then
+        run_interactive
+    else
+        run_flag_mode
+    fi
+}
+
+main "$@"

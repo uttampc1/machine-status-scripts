@@ -1,0 +1,370 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# list_machines  —  List machines from the inventory
+#
+# Usage:
+#   ./list_machines.sh                          list all machines
+#   ./list_machines.sh -s available             filter by status
+#   ./list_machines.sh -o "RHEL 9.3"            filter by OS
+#   ./list_machines.sh -p aarch64               filter by platform
+#   ./list_machines.sh -b bmc-worker-01         filter by BMC name
+#   ./list_machines.sh -r alice                 filter by reserved_by
+#   ./list_machines.sh -d "rack-2"              filter by description (substring)
+#   ./list_machines.sh -s reserved -p aarch64   combine filters
+#   ./list_machines.sh -j                       JSON output
+#   ./list_machines.sh --help
+#
+# Flags:
+#   -s  status           (available | reserved)
+#   -p  platform name    (exact match)
+#   -o  OS name          (substring match)
+#   -b  BMC name         (substring match)
+#   -r  reserved_by      (substring match)
+#   -d  description      (substring match)
+#   -m  machine name     (substring match)
+#   -j  JSON output
+#   --help
+# ─────────────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+# ── SERVER — edit this to point at your inventory server ──────────────────────
+SERVER="http://10.216.149.190:5000"
+
+# ── filter defaults (all empty = no filter) ───────────────────────────────────
+FILTER_STATUS=""
+FILTER_PLATFORM=""
+FILTER_OS=""
+FILTER_BMC=""
+FILTER_RESERVED_BY=""
+FILTER_DESCRIPTION=""
+FILTER_MACHINE=""
+JSON_OUTPUT=false
+
+# ── colours ───────────────────────────────────────────────────────────────────
+RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+
+# ── usage ─────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+
+${BOLD}list_machines.sh${RESET} — List machines in the inventory
+Server: ${SERVER}
+
+${BOLD}USAGE${RESET}
+  $(basename "$0")                          list all machines
+  $(basename "$0") [filter flags]           filter results
+  $(basename "$0") [filter flags] -j        JSON output
+
+${BOLD}FILTER FLAGS${RESET}  (all are optional, combine freely)
+  -m  machine name     substring match  e.g. -m worker
+  -s  status           exact match      available | reserved
+  -p  platform         exact match      e.g. -p aarch64
+  -o  OS               substring match  e.g. -o "RHEL 9"
+  -b  BMC name         substring match  e.g. -b bmc-rack2
+  -r  reserved_by      substring match  e.g. -r alice
+  -d  description      substring match  e.g. -d "rack-2"
+
+${BOLD}OUTPUT FLAGS${RESET}
+  -j  JSON output instead of text table
+  --help
+
+${BOLD}EXAMPLES${RESET}
+  $(basename "$0")
+  $(basename "$0") -s available
+  $(basename "$0") -s reserved
+  $(basename "$0") -p aarch64
+  $(basename "$0") -o "RHEL 9"
+  $(basename "$0") -r alice
+  $(basename "$0") -d "rack-2"
+  $(basename "$0") -m worker
+  $(basename "$0") -s reserved -p aarch64
+  $(basename "$0") -s available -o "RHEL 9.4" -p x86_64
+  $(basename "$0") -s reserved -j
+
+EOF
+    exit 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# ─────────────────────────────────────────────────────────────────────────────
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h)  usage ;;
+            -s)
+                FILTER_STATUS="$2"
+                if [[ "$FILTER_STATUS" != "available" && \
+                      "$FILTER_STATUS" != "reserved" ]]; then
+                    printf "${RED}Error: -s must be 'available' or 'reserved'.${RESET}\n" >&2
+                    exit 1
+                fi
+                shift 2
+                ;;
+            -p)  FILTER_PLATFORM="$2";    shift 2 ;;
+            -o)  FILTER_OS="$2";          shift 2 ;;
+            -b)  FILTER_BMC="$2";         shift 2 ;;
+            -r)  FILTER_RESERVED_BY="$2"; shift 2 ;;
+            -d)  FILTER_DESCRIPTION="$2"; shift 2 ;;
+            -m)  FILTER_MACHINE="$2";     shift 2 ;;
+            -j)  JSON_OUTPUT=true;        shift ;;
+            *)
+                printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
+                printf "Run with --help for usage.\n" >&2
+                exit 1
+                ;;
+        esac
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Build URL — only status filter goes server-side; rest are client-side
+# ─────────────────────────────────────────────────────────────────────────────
+build_url() {
+    local url="$SERVER/machines"
+    if [[ -n "$FILTER_STATUS" ]]; then
+	      url="${url}?status=${FILTER_STATUS}"
+		fi
+    echo "$url"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Client-side filtering in Python — applied after fetching JSON
+# Returns filtered JSON array on stdout
+# ─────────────────────────────────────────────────────────────────────────────
+apply_filters() {
+    local json="$1"
+
+    echo "$json" | python3 -c "
+import sys, json
+
+machines = json.load(sys.stdin)
+
+# filters passed as positional args: field, pattern, match_type (exact|sub)
+filters = []
+args = sys.argv[1:]
+i = 0
+while i < len(args):
+    field      = args[i]
+    pattern    = args[i+1].lower()
+    match_type = args[i+2]        # 'exact' or 'sub'
+    if pattern != '':
+        filters.append((field, pattern, match_type))
+    i += 3
+
+def matches(machine):
+    for field, pattern, match_type in filters:
+        val = str(machine.get(field) or '').lower()
+        if match_type == 'exact':
+            if val != pattern:
+                return False
+        else:  # substring
+            if pattern not in val:
+                return False
+    return True
+
+result = [m for m in machines if matches(m)]
+print(json.dumps(result))
+" \
+    "platform_name" "$FILTER_PLATFORM"    "exact" \
+    "os"            "$FILTER_OS"          "sub"   \
+    "bmc_name"      "$FILTER_BMC"         "sub"   \
+    "reserved_by"   "$FILTER_RESERVED_BY" "sub"   \
+    "description"   "$FILTER_DESCRIPTION" "sub"   \
+    "machine_name"  "$FILTER_MACHINE"     "sub"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Build a human-readable filter summary for the header line
+# ─────────────────────────────────────────────────────────────────────────────
+filter_summary() {
+    local parts=()
+    if [[ -n "$FILTER_STATUS"      ]]; then
+		    parts+=("status=${FILTER_STATUS}")
+		fi
+    if [[ -n "$FILTER_PLATFORM"    ]]; then
+		    parts+=("platform=${FILTER_PLATFORM}")
+		fi
+    if [[ -n "$FILTER_OS"          ]]; then
+		    parts+=("os~'${FILTER_OS}'")
+		fi
+    if [[ -n "$FILTER_BMC"         ]]; then
+		    parts+=("bmc~'${FILTER_BMC}'")
+		fi
+    if [[ -n "$FILTER_RESERVED_BY" ]]; then
+		    parts+=("reserved_by~'${FILTER_RESERVED_BY}'")
+		fi
+    if [[ -n "$FILTER_DESCRIPTION" ]]; then
+		    parts+=("description~'${FILTER_DESCRIPTION}'")
+		fi
+    if [[ -n "$FILTER_MACHINE"     ]]; then
+		    parts+=("machine~'${FILTER_MACHINE}'")
+		fi
+
+    if [[ ${#parts[@]} -eq 0 ]]; then
+        echo "all machines"
+    else
+        local IFS=",  "
+        echo "filter: ${parts[*]}"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Render a plain-text table from a JSON array (mirrors server-side renderer)
+# ─────────────────────────────────────────────────────────────────────────────
+render_table() {
+    local json="$1"
+
+    echo "$json" | python3 -c "
+import sys, json
+
+machines = json.load(sys.stdin)
+
+COLS = [
+    ('machine_name',  'MACHINE'),
+    ('platform_name', 'PLATFORM'),
+    ('ip_address',    'IP ADDRESS'),
+    ('bmc_name',      'BMC'),
+    ('os',            'OS'),
+    ('status',        'STATUS'),
+    ('reserved_by',   'RESERVED BY'),
+    ('description',   'DESCRIPTION'),
+]
+
+if not machines:
+    print('  (no machines match the filter)')
+    print()
+    sys.exit(0)
+
+# column widths
+widths = {}
+for key, header in COLS:
+    col_max = max((len(m.get(key) or '') for m in machines), default=0)
+    widths[key] = max(len(header), col_max)
+
+def divider():
+    return '+-' + '-+-'.join('-' * widths[k] for k, _ in COLS) + '-+'
+
+def fmt_row(values):
+    cells = (str(v or '').ljust(widths[k]) for (k, _), v in zip(COLS, values))
+    return '| ' + ' | '.join(cells) + ' |'
+
+print(divider())
+print(fmt_row([h for _, h in COLS]))
+print(divider())
+for m in machines:
+    print(fmt_row([m.get(k) for k, _ in COLS]))
+print(divider())
+print(f'  {len(machines)} machine(s).')
+print()
+"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stats line (always from full list regardless of filters)
+# ─────────────────────────────────────────────────────────────────────────────
+print_stats() {
+    local shown="$1"    # count after filtering
+    local all_json="$2" # full unfiltered JSON
+
+    echo "$all_json" | python3 -c "
+import sys, json
+
+machines = json.load(sys.stdin)
+total     = len(machines)
+available = sum(1 for m in machines if m.get('status') == 'available')
+reserved  = sum(1 for m in machines if m.get('status') == 'reserved')
+shown     = int(sys.argv[1])
+
+BOLD  = '\033[1m'
+GREEN = '\033[0;32m'
+YEL   = '\033[1;33m'
+CYAN  = '\033[0;36m'
+RST   = '\033[0m'
+
+if shown < total:
+    print(f'  {BOLD}Showing:{RST} {shown} of {total}   '
+          f'{GREEN}Available:{RST} {available}   '
+          f'{YEL}Reserved:{RST} {reserved}')
+else:
+    print(f'  {BOLD}Total:{RST} {total}   '
+          f'{GREEN}Available:{RST} {available}   '
+          f'{YEL}Reserved:{RST} {reserved}')
+print()
+" "$shown"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main list logic
+# ─────────────────────────────────────────────────────────────────────────────
+run_list() {
+    local url
+    url=$(build_url)
+
+    # ── fetch from server ─────────────────────────────────────────────────────
+    local response http_body http_code
+		set +e
+    response=$(curl -s -w "\n%{http_code}" \
+        -H "Accept: application/json" \
+        "$url")
+    curl_rc=$?
+		set -e
+    if [[ $curl_rc -ne 0 ]]; then
+        printf "${RED}Error: cannot reach server at %s${RESET}\n" "$SERVER" >&2
+        exit 2
+    fi
+
+    http_body=$(echo "$response" | head -n -1)
+    http_code=$(echo "$response" | tail -n 1)
+
+    if [[ "$http_code" != "200" ]]; then
+        printf "${RED}Error (HTTP %s): %s${RESET}\n" "$http_code" "$http_body" >&2
+        exit 1
+    fi
+
+    # ── fetch full list for stats (if we applied a server-side status filter)
+    local all_json="$http_body"
+    if [[ -n "$FILTER_STATUS" ]]; then
+        all_json=$(curl -s -H "Accept: application/json" "$SERVER/machines")
+    fi
+
+    # ── apply client-side filters ─────────────────────────────────────────────
+    local filtered_json
+    filtered_json=$(apply_filters "$http_body")
+
+    # ── count filtered results ────────────────────────────────────────────────
+    local shown
+    shown=$(echo "$filtered_json" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+
+    # ── JSON mode ─────────────────────────────────────────────────────────────
+    if [[ "$JSON_OUTPUT" == true ]]; then
+        echo "$filtered_json" | python3 -m json.tool
+        return
+    fi
+
+    # ── text table mode ───────────────────────────────────────────────────────
+    echo ""
+    printf "${BOLD}Machine Inventory${RESET}  —  %s\n" "$SERVER"
+
+    local summary
+    summary=$(filter_summary)
+    if [[ "$summary" != "all machines" ]]; then
+        printf "${CYAN}[ %s ]${RESET}\n" "$summary"
+    fi
+    echo ""
+
+    render_table "$filtered_json"
+    print_stats "$shown" "$all_json"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point
+# ─────────────────────────────────────────────────────────────────────────────
+main() {
+    parse_args "$@"
+    run_list
+}
+
+main "$@"
