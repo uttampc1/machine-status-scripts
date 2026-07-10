@@ -1,8 +1,10 @@
 #!/bin/bash
 sudo echo "Installing script, template and creating symlinks in /usr/local directory"
-TARGET_SCRIPT="/usr/local/bin/machine-status"
-TARGET_MSG="/usr/local/etc/machine-status.msg"
-STATUS_TEMPLATE="/usr/local/etc/machine-status.template"
+INSTALL_TOPDIR="/usr/local"
+INSTALL_BIN_DIR="${INSTALL_TOPDIR}/bin"
+TARGET_SCRIPT="${INSTALL_BIN_DIR}/machine-status"
+TARGET_MSG="${INSTALL_TOPDIR}/etc/machine-status.msg"
+STATUS_TEMPLATE="${INSTALL_TOPDIR}/etc/machine-status.template"
 
 sudo touch /var/log/machine-status.log
 sudo chmod 666 /var/log/machine-status.log
@@ -17,8 +19,20 @@ else
   fi
 fi
 
+sudo cp ./add_machine           ${INSTALL_BIN_DIR}
+sudo cp ./list_machines         ${INSTALL_BIN_DIR}
+sudo cp ./show_machine          ${INSTALL_BIN_DIR}
+sudo cp ./delete_machine        ${INSTALL_BIN_DIR}
+sudo cp ./update_machine        ${INSTALL_BIN_DIR}
+sudo cp ./update_machine_status ${INSTALL_BIN_DIR}
 sudo cp ./machine-status ${TARGET_SCRIPT}
 sudo chmod 555 ${TARGET_SCRIPT}
+sudo chmod 555 ${INSTALL_BIN_DIR}/add_machine
+sudo chmod 555 ${INSTALL_BIN_DIR}/list_machines
+sudo chmod 555 ${INSTALL_BIN_DIR}/show_machine
+sudo chmod 555 ${INSTALL_BIN_DIR}/delete_machine
+sudo chmod 555 ${INSTALL_BIN_DIR}/update_machine
+sudo chmod 555 ${INSTALL_BIN_DIR}/update_machine_status
 
 if [ ! -L /usr/local/bin/machine-reserve ]; then
   sudo ln -s ${TARGET_SCRIPT} /usr/local/bin/machine-reserve
