@@ -9,7 +9,14 @@
    $ machine-reserve < name | email | phone >   -- Reserve the machine. Arguments are optional.
    $ machine-release                            -- Release from reservation
    $ machine-report                             -- Display simple text report
+   $ list_machines                              -- Display list of machines from the backend server
+   $ show_machine -m machine_name               -- Display detail information about the server machine
+   $ add_machine    --help                      -- Display detail information about the server machine
+   $ update_machine --help                      -- Update information about the server machine
+   $ delete_machine --help                      -- Delete server machine from the backend database
 ```
+
+INFO: Backend server: Currently it's running at 10.216.169.120:5000
 
 Here is an output from machine-status command.
 ```console
