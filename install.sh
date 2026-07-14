@@ -19,7 +19,7 @@ else
   fi
 fi
 
-sudo cp ./config                ${INSTALL_TOPDIR}/etc/machines.config
+sudo cp ./machines.config                ${INSTALL_TOPDIR}/etc/machines.config
 sudo cp ./add_machine           ${INSTALL_BIN_DIR}
 sudo cp ./list_machines         ${INSTALL_BIN_DIR}
 sudo cp ./show_machine          ${INSTALL_BIN_DIR}
