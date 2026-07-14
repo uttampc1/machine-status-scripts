@@ -29,7 +29,8 @@
 set -euo pipefail
 
 # ── SERVER — edit this to point at your inventory server ──────────────────────
-SERVER="http://10.216.149.190:5000"
+CONFIG_DIR="/usr/local/etc"
+source ${CONFIG_DIR}/machines.config
 
 # ── filter defaults (all empty = no filter) ───────────────────────────────────
 FILTER_STATUS=""
@@ -40,6 +41,7 @@ FILTER_RESERVED_BY=""
 FILTER_DESCRIPTION=""
 FILTER_MACHINE=""
 JSON_OUTPUT=false
+CSV_OUTPUT=false
 
 # ── colours ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -110,6 +112,7 @@ parse_args() {
             -d)  FILTER_DESCRIPTION="$2"; shift 2 ;;
             -m)  FILTER_MACHINE="$2";     shift 2 ;;
             -j)  JSON_OUTPUT=true;        shift ;;
+            -c)  CSV_OUTPUT=true;         shift ;;
             *)
                 printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
                 printf "Run with --help for usage.\n" >&2
@@ -263,6 +266,64 @@ print()
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Render CSV output — all fields, header row + data rows
+# Properly quotes fields that contain commas, quotes, or newlines
+# ─────────────────────────────────────────────────────────────────────────────
+render_csv() {
+    local json="$1"
+
+    echo "$json" | python3 -c "
+import sys, json, csv, io
+
+machines = json.load(sys.stdin)
+
+# all fields in desired column order
+FIELDS = [
+    'machine_name',
+    'platform_name',
+    'ip_address',
+    'bmc_name',
+    'os',
+    'status',
+    'reserved_by',
+    'description',
+    'po_sms',
+    'program',
+    'socket',
+    'system_config',
+    'make',
+    'model',
+    'category',
+    'asset_owner',
+    'serial',
+    'maas_switch',
+    'pdu_ip',
+    'pdu_port',
+    'site',
+    'lab',
+    'row_location',
+    'rack',
+    'ru',
+    'cpu',
+    'backplane',
+    'jira',
+    'created_at',
+    'updated_at',
+]
+
+writer = csv.writer(sys.stdout, quoting=csv.QUOTE_MINIMAL)
+
+# header row
+writer.writerow(FIELDS)
+
+# data rows
+for m in machines:
+    row = [m.get(f) or '' for f in FIELDS]
+    writer.writerow(row)
+"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Stats line (always from full list regardless of filters)
 # ─────────────────────────────────────────────────────────────────────────────
 print_stats() {
@@ -339,6 +400,10 @@ run_list() {
     shown=$(echo "$filtered_json" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
 
     # ── JSON mode ─────────────────────────────────────────────────────────────
+    if [[ "$CSV_OUTPUT" == true ]]; then
+        render_csv "$filtered_json"
+        return
+    fi
     if [[ "$JSON_OUTPUT" == true ]]; then
         echo "$filtered_json" | python3 -m json.tool
         return

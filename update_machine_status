@@ -19,8 +19,11 @@
 
 set -euo pipefail
 
-SERVER="http://10.216.149.190:5000"
+# ── defaults ──────────────────────────────────────────────────────────────────
+CONFIG_DIR="/usr/local/etc"
+source ${CONFIG_DIR}/machines.config
 
+# ── field variables ───────────────────────────────────────────────────────────
 MACHINE_NAME=""
 NEW_STATUS=""
 NEW_RESERVED_BY=""

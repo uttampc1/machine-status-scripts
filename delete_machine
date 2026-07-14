@@ -16,7 +16,8 @@
 set -euo pipefail
 
 # ── defaults ──────────────────────────────────────────────────────────────────
-SERVER="http://10.216.149.190:5000"
+CONFIG_DIR="/usr/local/etc"
+source ${CONFIG_DIR}/machines.config
 MACHINE_NAME=""
 FORCE=false
 INTERACTIVE=false

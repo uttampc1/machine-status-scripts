@@ -16,7 +16,8 @@
 set -euo pipefail
 
 # ── SERVER — edit this to point at your inventory server ──────────────────────
-SERVER="http://10.216.149.190:5000"
+CONFIG_DIR="/usr/local/etc"
+source ${CONFIG_DIR}/machines.config
 
 # ── defaults ──────────────────────────────────────────────────────────────────
 MACHINE_NAME=""
@@ -206,6 +207,26 @@ row('IP address:',    m.get('ip_address'),    CYAN)
 row('BMC name:',      m.get('bmc_name'),      CYAN)
 row('OS:',            m.get('os'))
 row('Description:',   m.get('description'))
+row('Po/SMS:',        m.get('po_sms'))
+row('Program:',       m.get('program'))
+row('Socket:',        m.get('socket'))
+row('System_config:', m.get('system_config'))
+row('Make:',          m.get('make'))
+row('Model:',         m.get('model'))
+row('Category:',      m.get('category'))
+row('Asset Owner:',   m.get('asset_owner'))
+row('Serial:',        m.get('serial'))
+row('Maas Switch:',   m.get('maas_switch'))
+row('PDU ip:',        m.get('pdu_ip'))
+row('PDU port:',      m.get('pdu_port'))
+row('Site:',          m.get('site'))
+row('Lab:',           m.get('lab'))
+row('Row Location:',  m.get('row_location'))
+row('Rack:',          m.get('rack'))
+row('Ru:',            m.get('ru'))
+row('Cpu:',           m.get('cpu'))
+row('Backplane:',     m.get('backplane'))
+row('Jira:',          m.get('jira'))
 
 # ── status ────────────────────────────────────────────────────────────────────
 print()
