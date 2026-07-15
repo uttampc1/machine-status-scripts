@@ -16,7 +16,7 @@
    $ delete_machine --help                      -- Delete server machine from the backend database
 ```
 
-INFO: Backend server: Currently it's running at 10.216.169.120:5000
+
 
 Here is an output from machine-status command.
 ```console
