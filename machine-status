@@ -61,7 +61,7 @@ show_green() {
 }
 
 make_reservation() {
-	local uname=$1
+  local uname=$1
   username=$USER
   if [ "x${uname}" != "x" ]; then
     username=$uname
@@ -126,18 +126,18 @@ make_reservation() {
   echo "$DATE:Reserved by $username" >> /var/log/machine-status.log
   show_red "${username}: Machine is now reserved for you!" " ${DATE}"
 
-	# Update the global database
-	machine_name=`hostname`
-	if update_machine_status -m ${machine_name} -s reserved -r ${username} --quiet; then
+  # Update the global database
+  machine_name=`hostname`
+  if update_machine_status -m ${machine_name} -s reserved -r ${username} --quiet; then
     echo "$DATE: Database updated with the reservation."
     echo "INFO: Verify database entry using show_machine or list_machines commands"
-	else
+  else
     echo "${DATE}: Database update request failed"
   fi
 }
 
 release_reservation() {
-	local uname=$1
+  local uname=$1
   username=$USER
   if [ "x${uname}" != "x" ]; then
     username=$uname
@@ -201,16 +201,16 @@ release_reservation() {
   sed -e "s/STATUS/Available/g" -e "s/DATE/Date: $DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
   wall "INFO: Machine is available."
   show_green " ${DATE}"
-  echo "$DATE:Released" >> /var/log/machine-status.log
+  echo "$DATE:Released by $username" >> /var/log/machine-status.log
 
-	# Update the global database
-	machine_name=`hostname`
-	if update_machine_status -m ${machine_name} -s "available" --quiet; then
+  # Update the global database
+  machine_name=`hostname`
+  if update_machine_status -m ${machine_name} -s "available" --quiet; then
     echo "$DATE: Database updated"
     echo "INFO: Verify database entry using show_machine or list_machines commands"
-	else
+  else
     echo "${DATE}: Database update request failed"
-	fi
+  fi
 }
 
 show_machine_status() {
