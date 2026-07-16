@@ -62,9 +62,22 @@ show_green() {
 
 make_reservation() {
   local uname=$1
+  local askemail=0
   username=$USER
-  if [ "x${uname}" != "x" ]; then
+
+  if [[ "x${uname}" != "x" ]]; then
     username=$uname
+  fi
+
+  if [[ "${username}" == "amd" ]]; then
+    echo
+    response=""
+    while [[ -z "$response" || "$response" == "amd" ]];
+    do
+      read -r -p "Please enter name or email (can not be generic [amd] or empty): " response
+      response=$(echo "$response" | xargs)
+    done
+    username=$response
   fi
 
   if [ -f $TARGET_MSG ]; then
@@ -139,8 +152,20 @@ make_reservation() {
 release_reservation() {
   local uname=$1
   username=$USER
+
   if [ "x${uname}" != "x" ]; then
     username=$uname
+  fi
+
+  if [[ "${username}" == "amd" ]]; then
+    echo
+    response=""
+    while [[ -z "$response" || "$response" == "amd" ]];
+    do
+      read -r -p "Please enter name or email (can not be generic [amd] or empty): " response
+      response=$(echo "$response" | xargs)
+    done
+    username=$response
   fi
 
   if [ -f $TARGET_MSG ]; then
