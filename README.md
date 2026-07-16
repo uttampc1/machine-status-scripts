@@ -17,7 +17,13 @@
    $ update_machine_status --help               -- Make a remote reservation. See --help for additional info.
 ```
 
+⚠ Special Case — Remote Reservation:
 
+If the target machine cannot reach the inventory server (network isolation, firewall, etc.), you can update its reservation status from any machine that can reach the server:
+```
+update_machine_status -m <machine_name> -s reserved -r <your_name>
+```
+Note: This only updates the database. The machine's local MOTD and wall broadcast will not be updated. Run machine-reserve on the machine itself when connectivity is restored.
 
 Here is an output from machine-status command.
 ```console
