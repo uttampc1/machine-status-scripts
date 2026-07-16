@@ -14,6 +14,7 @@
    $ add_machine    --help                      -- Display detail information about the server machine
    $ update_machine --help                      -- Update information about the server machine
    $ delete_machine --help                      -- Delete server machine from the backend database
+   $ update_machine_status --help               -- Make a remote reservation. See --help for additional info.
 ```
 
 
