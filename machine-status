@@ -60,6 +60,19 @@ show_green() {
   printf "======================================================================${RESET}\n"
 }
 
+show_beaware_msg() {
+      # Simple STOP box
+      printf '\n'
+      printf "\t${BG_RED}${BOLD_WHITE}  ╔═════════════════════════════════════╗  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║                                     ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║     ⛔   PLEASE BE AWARE      ⛔    ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║     ⛔                        ⛔    ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║     ⛔ Machine is reserved    ⛔    ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ║                                     ║  ${RESET}\n"
+      printf "\t${BG_RED}${BOLD_WHITE}  ╚═════════════════════════════════════╝  ${RESET}\n"
+      printf '\n'
+}
+
 make_reservation() {
   local uname=$1
   local askemail=0
@@ -243,6 +256,7 @@ show_machine_status() {
   x=`grep "Reserved by" $TARGET_MSG`
   if [ "x${x}" != "x" ]; then
     n="$(echo "${x}" | sed -e 's/^[[:space:]]*//' | sed -e 's/^*[[:space:]]*//')"
+    show_beaware_msg
     show_red "${n}" "${dt}"
   else
     show_green "${dt}"
