@@ -10,6 +10,7 @@
 #   ./list_machines.sh -b bmc-worker-01         filter by BMC name
 #   ./list_machines.sh -r alice                 filter by reserved_by
 #   ./list_machines.sh -d "rack-2"              filter by description (substring)
+#   ./list_machines.sh -g "deae"                filter by team name (substring)
 #   ./list_machines.sh -s reserved -p aarch64   combine filters
 #   ./list_machines.sh -j                       JSON output
 #   ./list_machines.sh --help
@@ -22,6 +23,7 @@
 #   -r  reserved_by      (substring match)
 #   -d  description      (substring match)
 #   -m  machine name     (substring match)
+#   -g  group_name       (substring match)
 #   -j  JSON output
 #   --help
 # ─────────────────────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ FILTER_BMC=""
 FILTER_RESERVED_BY=""
 FILTER_DESCRIPTION=""
 FILTER_MACHINE=""
+FILTER_TEAM=""
 JSON_OUTPUT=false
 CSV_OUTPUT=false
 
@@ -67,6 +70,7 @@ ${BOLD}FILTER FLAGS${RESET}  (all are optional, combine freely)
   -b  BMC name         substring match  e.g. -b bmc-rack2
   -r  reserved_by      substring match  e.g. -r alice
   -d  description      substring match  e.g. -d "rack-2"
+  -g  team name        substring match  e.g. -g "deae"
 
 ${BOLD}OUTPUT FLAGS${RESET}
   -j  JSON output instead of text table
@@ -81,6 +85,7 @@ ${BOLD}EXAMPLES${RESET}
   $(basename "$0") -r alice
   $(basename "$0") -d "rack-2"
   $(basename "$0") -m worker
+  $(basename "$0") -g "deae"
   $(basename "$0") -s reserved -p aarch64
   $(basename "$0") -s available -o "RHEL 9.4" -p x86_64
   $(basename "$0") -s reserved -j
@@ -111,6 +116,7 @@ parse_args() {
             -r)  FILTER_RESERVED_BY="$2"; shift 2 ;;
             -d)  FILTER_DESCRIPTION="$2"; shift 2 ;;
             -m)  FILTER_MACHINE="$2";     shift 2 ;;
+            -g)  FILTER_TEAM="$2";        shift 2 ;;
             -j)  JSON_OUTPUT=true;        shift ;;
             -c)  CSV_OUTPUT=true;         shift ;;
             *)
@@ -128,8 +134,8 @@ parse_args() {
 build_url() {
     local url="$SERVER/machines"
     if [[ -n "$FILTER_STATUS" ]]; then
-	      url="${url}?status=${FILTER_STATUS}"
-		fi
+        url="${url}?status=${FILTER_STATUS}"
+    fi
     echo "$url"
 }
 
@@ -176,7 +182,8 @@ print(json.dumps(result))
     "bmc_name"      "$FILTER_BMC"         "sub"   \
     "reserved_by"   "$FILTER_RESERVED_BY" "sub"   \
     "description"   "$FILTER_DESCRIPTION" "sub"   \
-    "machine_name"  "$FILTER_MACHINE"     "sub"
+    "machine_name"  "$FILTER_MACHINE"     "sub"   \
+    "team"          "$FILTER_TEAM"        "sub"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -185,26 +192,29 @@ print(json.dumps(result))
 filter_summary() {
     local parts=()
     if [[ -n "$FILTER_STATUS"      ]]; then
-		    parts+=("status=${FILTER_STATUS}")
-		fi
+        parts+=("status=${FILTER_STATUS}")
+    fi
     if [[ -n "$FILTER_PLATFORM"    ]]; then
-		    parts+=("platform=${FILTER_PLATFORM}")
-		fi
+        parts+=("platform=${FILTER_PLATFORM}")
+    fi
     if [[ -n "$FILTER_OS"          ]]; then
-		    parts+=("os~'${FILTER_OS}'")
-		fi
+        parts+=("os~'${FILTER_OS}'")
+    fi
     if [[ -n "$FILTER_BMC"         ]]; then
-		    parts+=("bmc~'${FILTER_BMC}'")
-		fi
+        parts+=("bmc~'${FILTER_BMC}'")
+    fi
     if [[ -n "$FILTER_RESERVED_BY" ]]; then
-		    parts+=("reserved_by~'${FILTER_RESERVED_BY}'")
-		fi
+        parts+=("reserved_by~'${FILTER_RESERVED_BY}'")
+    fi
     if [[ -n "$FILTER_DESCRIPTION" ]]; then
-		    parts+=("description~'${FILTER_DESCRIPTION}'")
-		fi
+        parts+=("description~'${FILTER_DESCRIPTION}'")
+    fi
     if [[ -n "$FILTER_MACHINE"     ]]; then
-		    parts+=("machine~'${FILTER_MACHINE}'")
-		fi
+        parts+=("machine~'${FILTER_MACHINE}'")
+    fi
+    if [[ -n "$FILTER_TEAM"         ]]; then
+        parts+=("team~'${FILTER_TEAM}'")
+    fi
 
     if [[ ${#parts[@]} -eq 0 ]]; then
         echo "all machines"
@@ -231,6 +241,7 @@ COLS = [
     ('ip_address',    'IP ADDRESS'),
     ('bmc_name',      'BMC'),
     ('os',            'OS'),
+    ('team',          'TEAM'),
     ('status',        'STATUS'),
     ('reserved_by',   'RESERVED BY'),
     ('description',   'DESCRIPTION'),
@@ -366,12 +377,12 @@ run_list() {
 
     # ── fetch from server ─────────────────────────────────────────────────────
     local response http_body http_code
-		set +e
+    set +e
     response=$(curl -s -w "\n%{http_code}" \
         -H "Accept: application/json" \
         "$url")
     curl_rc=$?
-		set -e
+    set -e
     if [[ $curl_rc -ne 0 ]]; then
         printf "${RED}Error: cannot reach server at %s${RESET}\n" "$SERVER" >&2
         exit 2
