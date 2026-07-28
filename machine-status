@@ -15,6 +15,26 @@ RESET='\033[0m'
 BLINK='\033[5m'
 DIM='\033[2m'
 
+all_command_usage() {
+  printf "\n${BOLD_WHITE}Commands to Reserve / Release machine: ${RESET}\n"
+  printf "${BOLD_WHITE}=================================================\n"
+  printf "${BOLD}machine-status  ${RESET}             - Check machine status\n"
+  printf "${BOLD}machine-reserve <Name|Email>${RESET} - Reserve a machine\n"
+  printf "${BOLD}machine-release ${RESET}             - Release machine\n"
+  printf "${BOLD}machine-report ${RESET}              - Simple activity report\n"
+  printf "\n\n${BOLD_WHITE}Other Terminal Commands: ${RESET}\n"
+  printf "${BOLD_WHITE}=================================================\n"
+  printf "${BOLD}list_machines  --help${RESET} - Show list of machines\n"
+  printf "${BOLD}add_machine    --help${RESET} - Add new machine\n"
+  printf "${BOLD}show_machine   --help${RESET} - Show machine details\n"
+  printf "${BOLD}update_machine --help${RESET} - Update machine properties\n"
+  printf "${BOLD}delete_machine --help${RESET} - Delete machine record\n"
+  printf "\n${BOLD_WHITE}Special case of Remote Reservation: ${RESET}\n"
+  printf "If the target machine cannot reach the inventory server (network isolation, firewall, etc.), you can update its reservation status from any machine that can reach the server\n"
+  printf "${BOLD}update_machine_status --help${RESET}\n"
+  exit
+}
+
 show_usage() {
   printf "${BOLD_YELLOW}Usage:${RESET}\n"
   printf "\t$ machine-status               -- To ${BOLD_YELLOW}check${RESET} machine status\n"
@@ -267,6 +287,16 @@ report_reservations() {
   tail -n 25 /var/log/machine-status.log
   exit
 }
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help|-h) all_command_usage ;;
+    esac
+  done
+}
+
+parse_args "$@"
 
 if [ "$PROGNAME" == "machine-reserve" ]; then
   make_reservation $1
