@@ -55,15 +55,15 @@ INTERACTIVE=false
 BATCH=false
 
 # ── colours ───────────────────────────────────────────────────────────────────
-RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+RED=$'\033[0;31m';  GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'; BOLD=$'\033[1m';     RESET=$'\033[0m'
 
 # ── usage ─────────────────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
 
-${BOLD}add_machine.sh${RESET} — Register a new machine
-Server: ${SERVER}
+${BOLD}${RED}add_machine${RESET} — Register a new machine
+${YELLOW}Server${RESET}: ${SERVER}
 
 ${BOLD}INTERACTIVE MODE${RESET}
   $(basename "$0") --interactive

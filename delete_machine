@@ -23,14 +23,14 @@ FORCE=false
 INTERACTIVE=false
 
 # ── colours ───────────────────────────────────────────────────────────────────
-RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+RED=$'\033[0;31m';  GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'; BOLD=$'\033[1m';     RESET=$'\033[0m'
 
 # ── usage ─────────────────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
 
-${BOLD}delete_machine.sh${RESET} — Remove a machine from the inventory
+${BOLD}${RED}delete_machine${RESET} — Remove a machine from the inventory
 
 ${BOLD}INTERACTIVE MODE${RESET}
   $(basename "$0") --interactive

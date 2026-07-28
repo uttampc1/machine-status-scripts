@@ -30,8 +30,8 @@ NEW_RESERVED_BY=""
 INTERACTIVE=false
 QUIET=false
 
-RED='\033[0;31m';  GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-CYAN='\033[0;36m'; BOLD='\033[1m';     RESET='\033[0m'
+RED=$'\033[0;31m';  GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'; BOLD=$'\033[1m';     RESET=$'\033[0m'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Output helpers — suppressed when QUIET=true
@@ -51,8 +51,8 @@ sayln() {
 usage() {
     cat <<EOF
 
-${BOLD}update_machine_status.sh${RESET} — Reserve or release a machine
-Server: ${SERVER}
+${BOLD}${RED}update_machine_status${RESET} — Reserve or release a machine
+${YELLOW}Server${RESET}: ${SERVER}
 
 ${BOLD}INTERACTIVE MODE${RESET}
   $(basename "$0") --interactive
