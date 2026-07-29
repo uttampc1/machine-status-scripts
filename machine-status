@@ -291,7 +291,13 @@ report_reservations() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --help|-h) all_command_usage ;;
+      --help|-h)
+        all_command_usage
+        ;;
+      *)
+        POSITIONAL_ARGS+=("$1")
+        shift
+        ;;
     esac
   done
 }
@@ -299,9 +305,9 @@ parse_args() {
 parse_args "$@"
 
 if [ "$PROGNAME" == "machine-reserve" ]; then
-  make_reservation $1
+  make_reservation $POSITIONAL_ARGS
 elif [ "$PROGNAME" == "machine-release" ]; then
-  release_reservation $1
+  release_reservation $POSITIONAL_ARGS
 elif [ "$PROGNAME" == "machine-report" ]; then
   report_reservations
 else
