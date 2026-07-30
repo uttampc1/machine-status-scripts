@@ -51,9 +51,10 @@ Repository:
 ======================================================================
 ```
 
-```machine-reserve``` command does two (2) things as shown below,
-1) Update the status, and
-2) Broadcast a message to all connected users using ```wall``` command.
+```machine-reserve and machine-release``` both commands do few things as shown below,
+1) Update the local status,
+2) Broadcast a message to all connected users using ```wall``` command, and
+3) Update backend database entry with new status.
 
 ```console
 $ machine-reserve foo@gmail.com
