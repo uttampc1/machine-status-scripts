@@ -1,0 +1,6 @@
+[Unit]
+Description=Analyze machine usage and handle idle reservations
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/analyze.sh

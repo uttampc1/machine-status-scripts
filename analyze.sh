@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash 
 
 # ---- Load config (with fallback defaults) ----
 CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
@@ -6,7 +6,8 @@ CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
 
 # Fallback defaults if config missing or incomplete
 : "${DRY_RUN:=1}"
-: "${LOGFILE:=/var/log/machine-usage.csv}"
+: "${USAGE_LOG:=/var/log/machine-usage.csv}"
+: "${SYSADMIN_LOG:=/var/log/machine-sysadmin-alerts.log}"
 : "${STATE_FILE:=/var/log/machine-usage-state.txt}"
 : "${IDLE_CPU_THRESHOLD:=90}"
 : "${LOAD_THRESHOLD:=0.20}"
@@ -17,7 +18,6 @@ CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
 : "${RELEASE_CONFIRM:=7}"
 : "${INFO_PCT:=20}"
 : "${SYSADMIN_EMAIL:=root}"
-: "${SYSADMIN_LOG:=/tmp/machine-sysadmin-alerts.log}"
 
 # ---- Shared awk preamble: reads CSV, classifies points, buckets into blocks ----
 # Each function below is a thin wrapper around one awk pass.
@@ -30,6 +30,8 @@ is_weekend_ts() {
 }
 
 classify() {
+    [ -f "$USAGE_LOG" ] || return 0
+
     awk -F',' \
         -v cpu_thr="$IDLE_CPU_THRESHOLD" \
         -v load_thr="$LOAD_THRESHOLD" '
@@ -43,10 +45,11 @@ classify() {
         state = ($2 < cpu_thr || $3 >= load_thr) ? "ACTIVE" : "IDLE"
         printf "%s  %-6s  cpu_idle=%s  load1=%s  net=%.0f B/s\n", ts, state, $2, $3, net
         prx=rx; ptx=tx; pe=epoch
-    }' "$LOGFILE"
+    }' "$USAGE_LOG"
 }
 
 blocks() {
+    [ -f "$USAGE_LOG" ] || return 0
     awk -F',' \
         -v cpu_thr="$IDLE_CPU_THRESHOLD" -v load_thr="$LOAD_THRESHOLD" \
         -v max_pct="$IDLE_MAX_ACTIVE_PCT" -v win_h="$WINDOW_HOURS" \
@@ -103,10 +106,11 @@ blocks() {
             }
             printf "%-6d %-17s %-6d %-7d %-8.1f %s\n", b, (b*win_h)"-"((b+1)*win_h), t, a, pct, v
         }
-    }' "$LOGFILE"
+    }' "$USAGE_LOG"
 }
 
 streak() {
+    [ -f "$USAGE_LOG" ] || return 0
     awk -F',' \
         -v cpu_thr="$IDLE_CPU_THRESHOLD" -v load_thr="$LOAD_THRESHOLD" \
         -v max_pct="$IDLE_MAX_ACTIVE_PCT" -v win_h="$WINDOW_HOURS" \
@@ -166,7 +170,7 @@ streak() {
             }
         }
         print streak
-    }' "$LOGFILE"
+    }' "$USAGE_LOG"
 }
 
 escalation_level() {
@@ -303,7 +307,7 @@ release_eta_text() {
 
 # newest_timestamp — last (chronologically latest) record's timestamp
 newest_timestamp() {
-    tail -1 "$LOGFILE" | cut -d',' -f1
+    tail -1 "$USAGE_LOG" | cut -d',' -f1
 }
 
 # ---- Notification placeholders (real email is a later task) ----
@@ -390,6 +394,7 @@ main() {
 
     # 1. Reservation gate
     IFS='|' read -r status reserved_by < <(get_machine_status)
+    echo "STATUS is: $status"
 
     case "$status" in
         available)
@@ -397,6 +402,10 @@ main() {
             return 0
             ;;
         reserved)
+            if [ ! -f "$USAGE_LOG" ]; then
+                echo "[$name] reserved but collection yet. — nothing to do"
+                return 0
+	    fi
             ;;  # proceed
         *)
             notify_sysadmin "[$name] cannot determine reservation status (got: '$status')"
@@ -404,9 +413,14 @@ main() {
             ;;
     esac
 
+    if [ ! -f "$USAGE_LOG" ]; then
+        echo "[$name] usage log missing: $USAGE_LOG — nothing to analyze"
+        exit 0
+    fi
+
     # 2. Staleness gate (broken-cron detection)
     local health
-    health=$(staleness_check "$LOGFILE")
+    health=$(staleness_check "$USAGE_LOG")
 
     if [ "$health" = "STALE" ]; then
         notify_sysadmin \
@@ -455,11 +469,11 @@ main() {
 
 # ---- Dispatch ----
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
-  # $1 = logfile (optional; defaults to config LOGFILE)
+  # $1 = logfile (optional; defaults to config USAGE_LOG)
   # $2 = subcommand
-  LOGFILE="${1:-$LOGFILE}"
+  USAGE_LOG="${1:-$USAGE_LOG}"
 
-  case "${2:-streak}" in
+  case "${2:-run}" in
       classify) classify ;;
       blocks)   blocks ;;
       streak)   streak ;;
@@ -469,7 +483,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
           level=$(escalation_level "$days")
           echo "idle_days=$days level=$level"
           ;;
-      stale) staleness_check "$LOGFILE" "$3" ;;
+      stale) staleness_check "$USAGE_LOG" "$3" ;;
       run)  main ;;
       *) echo "Usage: $0 [logfile] {classify|blocks|streak|escalate|stale|run}"; exit 1 ;;
   esac

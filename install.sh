@@ -5,6 +5,7 @@ INSTALL_TOPDIR="/usr/local"
 INSTALL_BIN_DIR="${INSTALL_TOPDIR}/bin"
 INSTALL_ETC_DIR="${INSTALL_TOPDIR}/etc"
 
+
 TARGET_SCRIPT="${INSTALL_BIN_DIR}/machine-status"
 TARGET_MSG="${INSTALL_TOPDIR}/etc/machine-status.msg"
 STATUS_TEMPLATE="${INSTALL_TOPDIR}/etc/machine-status.template"
@@ -19,7 +20,11 @@ UPDATE_MACHINE_STATUS="${INSTALL_BIN_DIR}/update_machine_status"
 LOG_SCRIPT="${INSTALL_BIN_DIR}/log_usage.sh"
 ANALYZE_SCRIPT="${INSTALL_BIN_DIR}/analyze.sh"
 
-CRON_DST="/etc/cron.d/machine-usage-monitor"
+INSTALL_SERVICE_DIR="/etc/systemd/system"
+MACHINE_USAGE_LOG_SERVICE="${INSTALL_SERVICE_DIR}/machine-usage-log.service"
+MACHINE_USAGE_LOG_TIMER="${INSTALL_SERVICE_DIR}/machine-usage-log.timer"
+MACHINE_USAGE_ANALYZE_SERVICE="${INSTALL_SERVICE_DIR}/machine-usage-analyze.service"
+MACHINE_USAGE_ANALYZE_TIMER="${INSTALL_SERVICE_DIR}/machine-usage-analyze.timer"
 
 sudo mkdir -p "${INSTALL_BIN_DIR}" "${INSTALL_ETC_DIR}"
 
@@ -36,7 +41,7 @@ else
   fi
 fi
 
-sudo cp ./machines.config            ${INSTALL_ETC_DIR}/etc/machines.config
+sudo cp ./machines.config            ${INSTALL_ETC_DIR}/machines.config
 sudo cp ./machine-status             ${MACHINE_STATUS}
 sudo cp ./add_machine                ${ADD_MACHINE}
 sudo cp ./list_machines              ${LIST_MACHINES}
@@ -46,7 +51,6 @@ sudo cp ./update_machine             ${UPDATE_MACHINE}
 sudo cp ./update_machine_status      ${UPDATE_MACHINE_STATUS}
 sudo cp ./log_usage.sh               ${LOG_SCRIPT}
 sudo cp ./analyze.sh                 ${ANALYZE_SCRIPT}
-sudo cp ./machine-usage-monitor.cron ${CRON_DST}
 
 sudo chmod 555 ${MACHINE_STATUS}
 sudo chmod 555 ${ADD_MACHINE}
@@ -57,7 +61,15 @@ sudo chmod 555 ${UPDATE_MACHINE}
 sudo chmod 555 ${UPDATE_MACHINE_STATUS}
 sudo chmod 555 ${LOG_SCRIPT}
 sudo chmod 555 ${ANALYZE_SCRIPT}
-sudo chmod 644 ${CRON_DST}
+
+sudo cp ./machine-usage-log.service     ${MACHINE_USAGE_LOG_SERVICE}
+sudo cp ./machine-usage-log.timer       ${MACHINE_USAGE_LOG_TIMER}
+sudo cp ./machine-usage-analyze.service ${MACHINE_USAGE_ANALYZE_SERVICE}
+sudo cp ./machine-usage-analyze.timer   ${MACHINE_USAGE_ANALYZE_TIMER}
+sudo chmod 644 ${MACHINE_USAGE_LOG_SERVICE}
+sudo chmod 644 ${MACHINE_USAGE_LOG_TIMER}
+sudo chmod 644 ${MACHINE_USAGE_ANALYZE_SERVICE}
+sudo chmod 644 ${MACHINE_USAGE_ANALYZE_TIMER}
 
 if [ ! -L /usr/local/bin/machine-reserve ]; then
   sudo ln -s ${TARGET_SCRIPT} /usr/local/bin/machine-reserve
@@ -89,7 +101,7 @@ sudo ln -s ${TARGET_SCRIPT}  /etc/profile.d/check-machine-status.sh
 
 # Install cron jobs to run log_usage.sh and analyze.sh: TODO
 
-# Install cron jobs:
+# Install systemd services to:
 # - collect usage every 15 minutes
 # - analyze once per day at midnight
 echo "Installed:"
@@ -107,8 +119,19 @@ echo "     ${UPDATE_MACHINE}"
 echo "     ${UPDATE_MACHINE_STATUS}"
 echo "     ${LOG_SCRIPT}"
 echo "     ${ANALYZE_SCRIPT}"
-echo "  cron     -> ${CRON_DST}"
+echo "     ${MACHINE_USAGE_LOG_SERVICE}"
+echo "     ${MACHINE_USAGE_LOG_TIMER}"
+echo "     ${MACHINE_USAGE_ANALYZE_SERVICE}"
+echo "     ${MACHINE_USAGE_ANALYZE_TIMER}"
 echo
-echo "Cron schedule:"
-echo "  log_usage.sh : log usage every 15 minutes"
-echo "  analyze.sh   : analyze usage every 24 hours at 00:00"
+
+echo "Services started to log and anayze usage:"
+sudo systemctl daemon-reload
+sudo systemctl enable --now machine-usage-log.timer
+sudo systemctl enable --now machine-usage-analyze.timer
+
+echo "Verify services and check status. Try now."
+echo "systemctl list-timers --all | grep machine-usage"
+echo "systemctl status machine-usage-log.timer"
+echo "journalctl -u machine-usage-log.service"
+echo "journalctl -u machine-usage-analyze.service"
