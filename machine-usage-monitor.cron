@@ -1,0 +1,5 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/15 * * * * root /usr/local/bin/log_usage.sh >> /var/log/log_usage.cron.log 2>&1
+0 0 * * * root /usr/local/bin/analyze.sh >> /var/log/analyze.cron.log 2>&1

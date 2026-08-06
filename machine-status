@@ -1,8 +1,10 @@
 #!/bin/bash
 PROGNAME=$(basename -- "$0") #`basename $0`
+
+CONFIG_DIR="/usr/local/etc"
+source ${CONFIG_DIR}/machines.config
+
 DATE=`date`
-TARGET_MSG="/usr/local/etc/machine-status.msg"
-STATUS_TEMPLATE="/usr/local/etc/machine-status.template"
 
 BG_RED='\033[41m'
 BG_NONE='\033[49m'
@@ -169,7 +171,7 @@ make_reservation() {
   sed -e "s/STATUS/Reserved by $username/g" -e "s/DATE/Date: $DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
   wall "WARNING: Machine is reserved by $username."
   wall "INFO: Use machine-status command to see the latest status."
-  echo "$DATE:Reserved by $username" >> /var/log/machine-status.log
+  echo "$DATE:Reserved by $username" >> ${MACHINE_STATUS_LOG}
   show_red "${username}: Machine is now reserved for you!" " ${DATE}"
 
   # Update the global database
@@ -259,7 +261,7 @@ release_reservation() {
   sed -e "s/STATUS/Available/g" -e "s/DATE/Date: $DATE/g" ${STATUS_TEMPLATE} > ${TARGET_MSG}
   wall "INFO: Machine is available."
   show_green " ${DATE}"
-  echo "$DATE:Released by $username" >> /var/log/machine-status.log
+  echo "$DATE:Released by $username" >> ${MACHINE_STATUS_LOG}
 
   # Update the global database
   machine_name=`hostname`
@@ -284,7 +286,7 @@ show_machine_status() {
 }
 
 report_reservations() {
-  tail -n 25 /var/log/machine-status.log
+  tail -n 25 ${MACHINE_STATUS_LOG}
   exit
 }
 

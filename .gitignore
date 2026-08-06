@@ -1,3 +1,13 @@
 machine-release
 machine-reserve
 machine-report
+blocks.sh
+classify.sh
+get_machine_status
+streak.sh
+staleness_check.sh
+test_*.csv
+test_escalation.sh
+test_release
+wtest.sh
+gen_idle.sh
