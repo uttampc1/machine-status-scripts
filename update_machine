@@ -59,7 +59,7 @@ CYAN=$'\033[0;36m'; BOLD=$'\033[1m';     RESET=$'\033[0m'
 usage() {
     cat <<EOF
 
-${BOLD}${RED}update_machine{RESET} — Update machine fields (NOT status/reservation)
+${BOLD}${RED}update_machine${RESET} — Update machine fields (NOT status/reservation)
 ${YELLOW}Server${RESET}: ${SERVER}
 
 ${BOLD}INTERACTIVE MODE${RESET}
