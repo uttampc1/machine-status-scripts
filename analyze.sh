@@ -212,23 +212,50 @@ escalation_level() {
         return
     fi
 
-    # General case: n >= 4
-    # First 2 idle days are silent.
-    # INFO starts at day 3.
+    if [ "$n" -eq 4 ]; then
+        if [ "$streak" -ge 4 ]; then
+            echo "CONFIRM"
+        elif [ "$streak" -eq 3 ]; then
+            echo "WARNING"
+        elif [ "$streak" -eq 2 ]; then
+            echo "INFO"
+        else
+            echo "NONE"
+        fi
+        return
+    fi
+
+    # General case: n > 4
+		# Reaserve:
+		# - last day for CONFIRM
+		# - at least 1 day for WARNING
+		# - at least 1 day for INFO
+    # Use percentage-based silent window for the rest
+    
+		local silent_pct=40
+    local max_silent=$(( n - 3 ))
+    local silent_slots=$(( n * silent_pct / 100 ))
+    if [ "$silent_slots" -lt 1 ]; then
+	    silent_slots=1
+	  fi
+    if [ "$silent_slots" -gt "$max_silent" ]; then
+		  silent_slots="$max_silent"
+	  fi
+
+    local remaining_after_silent=$(( n - silent_slots - 1 ))  # excluding CONFIRM day
     local info_slots=$(( n * info_pct / 100 ))
     [ "$info_slots" -lt 1 ] && info_slots=1
 
-    # INFO covers day 3 .. info_end
-    local info_end=$(( 2 + info_slots ))
+    # Leave at least 1 day for WARNING
+    local max_info=$(( remaining_after_silent - 1 ))
+    [ "$info_slots" -gt "$max_info" ] && info_slots="$max_info"
 
-    # Keep final day for CONFIRM
-    [ "$info_end" -ge "$n" ] && info_end=$(( n - 1 ))
+    local info_end=$(( silent_slots + info_slots ))
 
-    if   [ "$streak" -gt "$n" ];         then echo "CONFIRM"
-    elif [ "$streak" -eq "$n" ];         then echo "CONFIRM"
-    elif [ "$streak" -le 2 ];            then echo "NONE"
-    elif [ "$streak" -le "$info_end" ];  then echo "INFO"
-    else                                      echo "WARNING"
+    if   [ "$streak" -ge "$n" ];            then echo "CONFIRM"
+    elif [ "$streak" -le "$silent_slots" ]; then echo "NONE"
+    elif [ "$streak" -le "$info_end" ];     then echo "INFO"
+    else                                         echo "WARNING"
     fi
 }
 
