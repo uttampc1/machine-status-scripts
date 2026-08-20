@@ -11,3 +11,4 @@ test_escalation.sh
 test_release
 wtest.sh
 gen_idle.sh
+test_motd
