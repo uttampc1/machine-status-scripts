@@ -1,0 +1,9 @@
+[Unit]
+Description=Run machine usage analysis daily at 00:01
+
+[Timer]
+OnCalendar=*-*-* 00:01:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

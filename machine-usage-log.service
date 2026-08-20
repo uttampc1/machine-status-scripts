@@ -1,0 +1,6 @@
+[Unit]
+Description=Collect machine usage metrics
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/log_usage.sh

@@ -245,6 +245,7 @@ COLS = [
     ('status',        'STATUS'),
     ('reserved_by',   'RESERVED BY'),
     ('description',   'DESCRIPTION'),
+    ('motd',          'MOTD'),
 ]
 
 if not machines:
@@ -298,6 +299,7 @@ FIELDS = [
     'status',
     'reserved_by',
     'description',
+    'motd',
     'po_sms',
     'program',
     'socket',
