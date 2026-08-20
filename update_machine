@@ -50,6 +50,7 @@ NEW_RU=""
 NEW_CPU=""
 NEW_BACKPLANE=""
 NEW_JIRA=""
+NEW_MOTD=""
 
 # ── colours ───────────────────────────────────────────────────────────────────
 RED=$'\033[0;31m';  GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
@@ -100,6 +101,7 @@ ${BOLD}INVENTORY FLAGS${RESET}
   --cpu <val>           CPU type
   --backplane <val>     backplane type
   --jira <val>          JIRA ticket
+  --motd <val>          Latest message
 
 ${BOLD}OTHER${RESET}
   --interactive         guided prompt mode
@@ -116,6 +118,7 @@ ${BOLD}EXAMPLES${RESET}
   $(basename "$0") -m worker-01 -p aarch64 -i 10.0.2.1 -o "RHEL 9.4"
   $(basename "$0") -m worker-01 --site Austin --rack R42 --cpu Turin
   $(basename "$0") -m worker-01 --jira PROJ-1234 --serial SN-ABC
+  $(basename "$0") -m worker-01 --motd "[INFO] reserved but idle for 3 days"
 
 EOF
     exit 0
@@ -156,6 +159,7 @@ parse_args() {
             --cpu)            NEW_CPU="$2";             shift 2 ;;
             --backplane)      NEW_BACKPLANE="$2";       shift 2 ;;
             --jira)           NEW_JIRA="$2";            shift 2 ;;
+            --motd)           NEW_MOTD="$2";            shift 2 ;;
             *)
                 printf "${RED}Unknown option: %s${RESET}\n" "$1" >&2
                 printf "Run with --help for usage.\n" >&2
@@ -344,6 +348,7 @@ fields = [
     ('CPU',           'cpu'),
     ('Backplane',     'backplane'),
     ('JIRA',          'jira'),
+    ('MOTD',          'motd'),
 ]
 for label, key in fields:
     val = m.get(key) or '(none)'
@@ -386,6 +391,7 @@ FIELD_MAP=(
     "CPU|NEW_CPU|cpu"
     "Backplane|NEW_BACKPLANE|backplane"
     "JIRA|NEW_JIRA|jira"
+    "MOTD|NEW_MOTD|motd"
 )
 
 print_change_summary() {

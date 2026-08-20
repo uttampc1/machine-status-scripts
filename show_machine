@@ -227,6 +227,7 @@ row('Ru:',            m.get('ru'))
 row('Cpu:',           m.get('cpu'))
 row('Backplane:',     m.get('backplane'))
 row('Jira:',          m.get('jira'))
+row('Motd:',          m.get('motd'))
 
 # ── status ────────────────────────────────────────────────────────────────────
 print()

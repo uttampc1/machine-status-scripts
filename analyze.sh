@@ -17,7 +17,7 @@ CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
 : "${STALE_HOURS:=24}"
 : "${RELEASE_CONFIRM:=7}"
 : "${INFO_PCT:=20}"
-: "${SYSADMIN_EMAIL:=root}"
+: "${SYSADMIN_EMAIL:=upawar}"
 
 # ---- Shared awk preamble: reads CSV, classifies points, buckets into blocks ----
 # Each function below is a thin wrapper around one awk pass.
@@ -351,28 +351,9 @@ notify_sysadmin() {
     fi
 }
 
-notify_user() {
-    local level="$1" machine="$2" user="$3" days="$4"
-
-    local banner message eta
-    eta=$(release_eta_text "$days")
-
-    case "$level" in
-        INFO)
-            banner="NOTICE: Machine Idle"
-            message="According to current idle policy, this machine will be released in $eta if not used."
-            ;;
-        WARNING)
-            banner="WARNING: Machine Idle - Action Needed"
-            message="According to current idle policy, this machine will be released in $eta if not used."
-            ;;
-        CONFIRM)
-            banner="FINAL NOTICE: Reservation Will Be Released"
-            message="According to current idle policy, this machine is now eligible for release."
-            ;;
-    esac
-
-    wall <<EOF
+wall_message() {
+    local banner="$1" machine="$2" user="$3" days="$4"
+    write $user <<EOF
 ========================================
 $banner
 ========================================
@@ -384,6 +365,38 @@ Please use the machine or release your
 reservation if no longer needed.
 ========================================
 EOF
+}
+
+notify_user() {
+    local level="$1" machine="$2" user="$3" days="$4"
+
+    local banner message eta
+    eta=$(release_eta_text "$days")
+
+    local motd=""
+    case "$level" in
+        INFO)
+            banner="NOTICE: Machine Idle"
+            message="According to current idle policy, this machine will be released in $eta if not used."
+            motd="[INFO] reserved but idle for ${days} days"
+            ;;
+        WARNING)
+            banner="WARNING: Machine Idle - Action Needed"
+            message="According to current idle policy, this machine will be released in $eta if not used."
+            motd="[WARNING] reserved but idle for ${days} days. This machine will be released in $eta if not used."
+            ;;
+        CONFIRM)
+            banner="FINAL NOTICE: Reservation Will Be Released"
+            message="According to current idle policy, this machine is now eligible for release."
+            motd="[CONFIRM] reserved but idle for ${days} days. This machine will be released in 24 hours."
+            ;;
+    esac
+    if [ "x$motd" != "x" ]; then
+      # DB update: update_machine -m <mname> --motd ${motd}" 
+      ./update_machine -m ${machine} --motd "${motd}"
+    fi
+
+    # wall_message $banner $machine $user $days
 }
 
 release_reservation() {
@@ -411,7 +424,6 @@ release_reservation() {
         "[$host] reservation RELEASED after idle timeout" \
         "was reserved_by=$user; escalation reached CONFIRM"
 }
-
 
 # ---- Main pipeline: the once-a-day analyzer ----
 # main [machine_name]
