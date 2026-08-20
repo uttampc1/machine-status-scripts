@@ -184,9 +184,9 @@ escalation_level() {
     if [ "$n" -le 1 ]; then
         if [ "$streak" -le 1 ]; then
           echo "INFO"
-		    else 
+        else
           echo "CONFIRM"
-		    fi 
+        fi
         return
     fi
 
@@ -226,21 +226,21 @@ escalation_level() {
     fi
 
     # General case: n > 4
-		# Reaserve:
-		# - last day for CONFIRM
-		# - at least 1 day for WARNING
-		# - at least 1 day for INFO
+    # Reaserve:
+    # - last day for CONFIRM
+    # - at least 1 day for WARNING
+    # - at least 1 day for INFO
     # Use percentage-based silent window for the rest
-    
-		local silent_pct=40
+
+    local silent_pct=40
     local max_silent=$(( n - 3 ))
     local silent_slots=$(( n * silent_pct / 100 ))
     if [ "$silent_slots" -lt 1 ]; then
-	    silent_slots=1
-	  fi
+      silent_slots=1
+    fi
     if [ "$silent_slots" -gt "$max_silent" ]; then
-		  silent_slots="$max_silent"
-	  fi
+      silent_slots="$max_silent"
+    fi
 
     local remaining_after_silent=$(( n - silent_slots - 1 ))  # excluding CONFIRM day
     local info_slots=$(( n * info_pct / 100 ))
@@ -388,7 +388,7 @@ notify_user() {
         CONFIRM)
             banner="FINAL NOTICE: Reservation Will Be Released"
             message="According to current idle policy, this machine is now eligible for release."
-            motd="[CONFIRM] reserved but idle for ${days} days. This machine will be released in 24 hours."
+            motd="[CONFIRM] reserved but idle for ${days} days. This machine will be released in $eta."
             ;;
     esac
     if [ "x$motd" != "x" ]; then
@@ -444,7 +444,7 @@ main() {
             if [ ! -f "$USAGE_LOG" ]; then
                 echo "[$name] reserved but collection yet. — nothing to do"
                 return 0
-	    fi
+            fi
             ;;  # proceed
         *)
             notify_sysadmin "[$name] cannot determine reservation status (got: '$status')"
