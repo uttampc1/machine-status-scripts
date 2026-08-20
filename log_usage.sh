@@ -2,6 +2,7 @@
 
 CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
 [ -f "$CONFIG" ] && source "$CONFIG"
+: "${SYSADMIN_EMAIL:=upawar}"
 
 get_machine_status() {
     local out status reserved_by
@@ -61,7 +62,7 @@ case "$status" in
         echo "[$name] available — nothing to collect."
         if [ -f "$USAGE_LOG" ]; then
             /bin/rm -f "$USAGE_LOG"
-	fi
+        fi
         exit 0
         ;;
     reserved)
