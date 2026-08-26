@@ -137,10 +137,10 @@ echo "journalctl -u machine-usage-analyze.service"
 
 install_online_reservation_service() {
   REPO_URL="https://github.com/uttampc1/online-reserve-service.git"
-  APP_NAME="online-reservation"
+  APP_NAME="machine-online-reservation"
   INSTALL_DIR="/opt/${APP_NAME}"
   VENV_DIR="${INSTALL_DIR}/venv"
-  SERVICE_NAME="online-reservation"
+  SERVICE_NAME="machine-online-reservation"
   APP_USER="${SUDO_USER:-$(whoami)}"
   APP_GROUP="$(id -gn "$APP_USER")"
   APP_FILE="app.py"
