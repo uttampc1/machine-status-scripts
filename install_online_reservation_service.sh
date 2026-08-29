@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#set -euo pipefail
+set -euo pipefail
 
 install_online_reservation_service() {
   REPO_URL="https://github.com/uttampc1/online-reserve-service.git"
