@@ -393,7 +393,7 @@ notify_user() {
     esac
     if [ "x$motd" != "x" ]; then
       # DB update: update_machine -m <mname> --motd ${motd}" 
-      ./update_machine -m ${machine} --motd "${motd}"
+      /usr/local/bin/update_machine -m ${machine} --motd "${motd}"
     fi
 
     # wall_message $banner $machine $user $days
