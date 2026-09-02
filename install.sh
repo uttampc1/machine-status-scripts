@@ -16,6 +16,7 @@ SHOW_MACHINE="${INSTALL_BIN_DIR}/show_machine"
 DELETE_MACHINE="${INSTALL_BIN_DIR}/delete_machine"
 UPDATE_MACHINE="${INSTALL_BIN_DIR}/update_machine"
 UPDATE_MACHINE_STATUS="${INSTALL_BIN_DIR}/update_machine_status"
+EXTEND_RESERVATION_SCRIPT="${INSTALL_BIN_DIR}/extend_reservation"
 LOG_SCRIPT="${INSTALL_BIN_DIR}/log_usage.sh"
 ANALYZE_SCRIPT="${INSTALL_BIN_DIR}/analyze.sh"
 UTILS_SCRIPT="${INSTALL_LIB_DIR}/utils.sh"
@@ -49,6 +50,7 @@ sudo cp ./show_machine               ${SHOW_MACHINE}
 sudo cp ./delete_machine             ${DELETE_MACHINE}
 sudo cp ./update_machine             ${UPDATE_MACHINE}
 sudo cp ./update_machine_status      ${UPDATE_MACHINE_STATUS}
+sudo cp ./extend_reservation         ${EXTEND_RESERVATION_SCRIPT}
 sudo cp ./log_usage.sh               ${LOG_SCRIPT}
 sudo cp ./analyze.sh                 ${ANALYZE_SCRIPT}
 sudo cp ./utils.sh                   ${UTILS_SCRIPT}
@@ -60,6 +62,7 @@ sudo chmod 555 ${SHOW_MACHINE}
 sudo chmod 555 ${DELETE_MACHINE}
 sudo chmod 555 ${UPDATE_MACHINE}
 sudo chmod 555 ${UPDATE_MACHINE_STATUS}
+sudo chmod 555 ${EXTEND_RESERVATION_SCRIPT}
 sudo chmod 555 ${LOG_SCRIPT}
 sudo chmod 555 ${ANALYZE_SCRIPT}
 sudo chmod 444 ${UTILS_SCRIPT}
@@ -119,6 +122,7 @@ echo "     ${SHOW_MACHINE}"
 echo "     ${DELETE_MACHINE}"
 echo "     ${UPDATE_MACHINE}"
 echo "     ${UPDATE_MACHINE_STATUS}"
+echo "     ${EXTEND_RESERVATION_SCRIPT}"
 echo "     ${LOG_SCRIPT}"
 echo "     ${ANALYZE_SCRIPT}"
 echo "     ${UTILS_SCRIPT}"
