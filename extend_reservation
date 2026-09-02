@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+#
+# extend_reservation.sh — reset idle tracking for the current reservation
+#
+# Run this ON the machine. Resets the idle clock so the analyzer will not
+# escalate toward release. Extension is always for the current holder.
+#
+# Usage:
+#   extend_reservation.sh            # extend for current holder ($USER)
+#   extend_reservation.sh <holder>   # assert holder to skip prompt
+#
+
+set -u
+
+CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
+UTILS="${UTILS:- /usr/local/lib/utils.sh}"
+
+# ---- Load config ----
+if [[ ! -f "$CONFIG" ]]; then
+    echo "ERROR: config not found: $CONFIG" >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+. "$CONFIG"
+
+# ---- Load shared helpers (ask_yes_no, get_machine_status, colors) ----
+if [[ ! -f "$UTILS" ]]; then
+    echo "ERROR: utils not found: $UTILS" >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+. "$UTILS"
+
+# ---- Required config values ----
+: "${USAGE_LOG:?USAGE_LOG not set in $CONFIG}"
+: "${STATE_FILE:?STATE_FILE not set in $CONFIG}"
+: "${MACHINE_STATUS_LOG:?MACHINE_STATUS_LOG not set in $CONFIG}"
+
+# ---- Determine current reservation (local authoritative truth) ----
+IFS='|' read -r status reserved_by < <(get_machine_status)
+
+host="$(hostname)"
+caller="$USER"
+arg="${1:-}"
+
+# ---- Gate: must be reserved ----
+if [[ "$status" != "reserved" ]]; then
+    echo "[$host] Machine is not reserved — nothing to extend." >&2
+    exit 1
+fi
+
+# ---- Authorization / confirmation ----
+if [[ -n "$arg" ]]; then
+    # Argument provided: must match the current holder exactly.
+    if [[ "$arg" != "$reserved_by" ]]; then
+        echo "ERROR: argument '$arg' does not match reservation holder '$reserved_by'." >&2
+        exit 1
+    fi
+    # Matches → proceed without prompt.
+else
+    # No argument: prompt only if caller is not the holder.
+    if [[ "$caller" != "$reserved_by" ]]; then
+        if [[ ! -t 0 ]]; then
+            echo "ERROR: reserved by '$reserved_by'; cannot confirm as ($caller) with no TTY. Aborting." >&2
+            exit 1
+        fi
+        ask_yes_no CONFIRMED \
+            "This machine is reserved by '$reserved_by'. Are you ($caller) extending for '$reserved_by'?" \
+            "n"
+        if [[ "$CONFIRMED" != "true" ]]; then
+            echo "Aborted."
+            exit 0
+        fi
+    fi
+fi
+
+# ---- Reset idle tracking ----
+/bin/rm -f "$USAGE_LOG"
+/bin/rm -f "$STATE_FILE"
+
+# Informational MOTD (non-empty, so update_machine accepts it)
+now="$(date)"
+update_machine -m "$host" --motd "[EXTENDED] Extended the reservation on $now" --yes
+
+# ---- Audit ----
+if [[ "$caller" == "$reserved_by" ]]; then
+    printf '%s:Extended by %s\n' "$now" "$caller" >> "$MACHINE_STATUS_LOG"
+else
+    printf '%s:Extended by %s (reserved by %s)\n' "$now" "$caller" "$reserved_by" \
+        >> "$MACHINE_STATUS_LOG"
+fi
+
+# ---- Confirm ----
+echo "Reservation extended for '$reserved_by'. Idle tracking reset."
+exit 0

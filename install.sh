@@ -3,7 +3,7 @@ sudo echo "Installing script, template and creating symlinks in /usr/local direc
 
 INSTALL_TOPDIR="/usr/local"
 INSTALL_BIN_DIR="${INSTALL_TOPDIR}/bin"
-INSTALL_ETC_DIR="${INSTALL_TOPDIR}/etc"
+INSTALL_LIB_DIR="${INSTALL_TOPDIR}/lib"
 
 TARGET_SCRIPT="${INSTALL_BIN_DIR}/machine-status"
 TARGET_MSG="${INSTALL_TOPDIR}/etc/machine-status.msg"
@@ -18,6 +18,7 @@ UPDATE_MACHINE="${INSTALL_BIN_DIR}/update_machine"
 UPDATE_MACHINE_STATUS="${INSTALL_BIN_DIR}/update_machine_status"
 LOG_SCRIPT="${INSTALL_BIN_DIR}/log_usage.sh"
 ANALYZE_SCRIPT="${INSTALL_BIN_DIR}/analyze.sh"
+UTILS_SCRIPT="${INSTALL_LIB_DIR}/utils.sh"
 
 INSTALL_SERVICE_DIR="/etc/systemd/system"
 MACHINE_USAGE_LOG_SERVICE="${INSTALL_SERVICE_DIR}/machine-usage-log.service"
@@ -25,7 +26,7 @@ MACHINE_USAGE_LOG_TIMER="${INSTALL_SERVICE_DIR}/machine-usage-log.timer"
 MACHINE_USAGE_ANALYZE_SERVICE="${INSTALL_SERVICE_DIR}/machine-usage-analyze.service"
 MACHINE_USAGE_ANALYZE_TIMER="${INSTALL_SERVICE_DIR}/machine-usage-analyze.timer"
 
-sudo mkdir -p "${INSTALL_BIN_DIR}" "${INSTALL_ETC_DIR}"
+sudo mkdir -p "${INSTALL_BIN_DIR}" "${INSTALL_ETC_DIR}" "${INSTALL_LIB_DIR}"
 
 sudo touch /var/log/machine-status.log
 sudo chmod 666 /var/log/machine-status.log
@@ -50,6 +51,7 @@ sudo cp ./update_machine             ${UPDATE_MACHINE}
 sudo cp ./update_machine_status      ${UPDATE_MACHINE_STATUS}
 sudo cp ./log_usage.sh               ${LOG_SCRIPT}
 sudo cp ./analyze.sh                 ${ANALYZE_SCRIPT}
+sudo cp ./utils.sh                   ${UTILS_SCRIPT}
 
 sudo chmod 555 ${MACHINE_STATUS}
 sudo chmod 555 ${ADD_MACHINE}
@@ -60,6 +62,7 @@ sudo chmod 555 ${UPDATE_MACHINE}
 sudo chmod 555 ${UPDATE_MACHINE_STATUS}
 sudo chmod 555 ${LOG_SCRIPT}
 sudo chmod 555 ${ANALYZE_SCRIPT}
+sudo chmod 444 ${UTILS_SCRIPT}
 
 sudo cp ./machine-usage-log.service     ${MACHINE_USAGE_LOG_SERVICE}
 sudo cp ./machine-usage-log.timer       ${MACHINE_USAGE_LOG_TIMER}
@@ -118,6 +121,7 @@ echo "     ${UPDATE_MACHINE}"
 echo "     ${UPDATE_MACHINE_STATUS}"
 echo "     ${LOG_SCRIPT}"
 echo "     ${ANALYZE_SCRIPT}"
+echo "     ${UTILS_SCRIPT}"
 echo "     ${MACHINE_USAGE_LOG_SERVICE}"
 echo "     ${MACHINE_USAGE_LOG_TIMER}"
 echo "     ${MACHINE_USAGE_ANALYZE_SERVICE}"

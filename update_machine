@@ -22,6 +22,7 @@ source ${CONFIG_DIR}/machines.config
 # ── current machine identifier ────────────────────────────────────────────────
 CURRENT_NAME=""
 INTERACTIVE=false
+ASSUME_YES=0
 
 # ── new values (empty = not changing) ─────────────────────────────────────────
 NEW_NAME=""
@@ -104,6 +105,7 @@ ${BOLD}INVENTORY FLAGS${RESET}
   --motd <val>          Latest message
 
 ${BOLD}OTHER${RESET}
+  --yes                 Avoid prompting (non-interactive)
   --interactive         guided prompt mode
   --help
 
@@ -130,6 +132,7 @@ EOF
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --yes|-y)         ASSUME_YES=1;             shift ;;
             --interactive)    INTERACTIVE=true;         shift ;;
             --help|-h)        usage ;;
             -m)               CURRENT_NAME="$2";        shift 2 ;;
@@ -758,7 +761,7 @@ run_flag_mode() {
     fi
 
     # confirm if running in a terminal
-    if [[ -t 0 ]]; then
+    if [[ "$ASSUME_YES" -eq 0 && -t 0 ]]; then
         local CONFIRMED
         ask_yes_no CONFIRMED "Apply these changes?" "y"
         if [[ "$CONFIRMED" == false ]]; then

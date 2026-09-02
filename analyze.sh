@@ -340,7 +340,7 @@ newest_timestamp() {
 
 # ---- Notification placeholders (real email is a later task) ----
 notify_sysadmin() {
-    local subject="$1" body="$2"
+    local subject="admin:$1" body="$2"
 
     if command -v mail >/dev/null 2>&1; then
         echo "$body" | mail -s "$subject" "$SYSADMIN_EMAIL"
@@ -393,8 +393,8 @@ notify_user() {
             ;;
     esac
     if [ "x$motd" != "x" ]; then
-      # DB update: update_machine -m <mname> --motd ${motd}" 
-      /usr/local/bin/update_machine -m ${machine} --motd "${motd}"
+      # DB update: update_machine -m <mname> --motd ${motd} --yes" 
+      /usr/local/bin/update_machine -m ${machine} --motd "${motd}" --yes
     fi
 
     # wall_message $banner $machine $user $days
