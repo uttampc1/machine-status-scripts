@@ -5,7 +5,7 @@ CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
 [ -f "$CONFIG" ] && source "$CONFIG"
 
 # Fallback defaults if config missing or incomplete
-: "${DRY_RUN:=1}"
+: "${DRY_RUN:=0}"
 : "${USAGE_LOG:=/var/log/machine-usage.csv}"
 : "${SYSADMIN_LOG:=/var/log/machine-sysadmin-alerts.log}"
 : "${STATE_FILE:=/var/log/machine-usage-state.txt}"
@@ -15,9 +15,10 @@ CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
 : "${IDLE_MAX_ACTIVE_PCT:=10}"
 : "${MIN_POINTS_PER_WINDOW:=10}"
 : "${STALE_HOURS:=24}"
-: "${RELEASE_CONFIRM:=7}"
+: "${RELEASE_CONFIRM:=15}"
 : "${INFO_PCT:=20}"
-: "${SYSADMIN_EMAIL:=upawar}"
+: "${SYSADMIN_EMAIL:=upawar@localhost}"
+: "${FORCE_NOTIFY:=0}"    # 1 = ignore dedup, always act (for testing)
 
 # ---- Shared awk preamble: reads CSV, classifies points, buckets into blocks ----
 # Each function below is a thin wrapper around one awk pass.
@@ -419,7 +420,7 @@ release_reservation() {
         return 0
     fi
 
-    echo machine-release          # local, auto-hostname, always succeeds
+    echo /usr/local/bin/machine-release          # local, auto-hostname, always succeeds
     notify_sysadmin \
         "[$host] reservation RELEASED after idle timeout" \
         "was reserved_by=$user; escalation reached CONFIRM"
@@ -469,13 +470,15 @@ main() {
     fi
 
     # 2b. Dedup gate — guards ONLY the user ladder
-    local current last
-    current=$(newest_timestamp)
-    last=$(cat "$STATE_FILE" 2>/dev/null)
+    if [ "$FORCE_NOTIFY" != "1" ]; then
+        local current last
+        current=$(newest_timestamp)
+        last=$(cat "$STATE_FILE" 2>/dev/null)
 
-    if [ "$current" = "$last" ]; then
-        echo "[$name] no new data since last run ($last) — skipping user ladder"
-        return 0
+        if [ "$current" = "$last" ]; then
+            echo "[$name] no new data since last run ($last) — skipping user ladder"
+            return 0
+        fi
     fi
 
     # 3. Idle analysis + escalation
