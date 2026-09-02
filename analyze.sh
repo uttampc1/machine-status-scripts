@@ -507,6 +507,7 @@ main() {
 
     # 4. Record that we've processed up to here (even if NONE)
     echo "$current" > "$STATE_FILE"
+    chmod 666 "$STATE_FILE" 2>/dev/null
 }
 
 # ---- Dispatch ----

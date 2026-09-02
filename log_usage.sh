@@ -74,8 +74,9 @@ case "$status" in
 esac
 
 # Write header once
-if [ ! -f "$USAGE_LOG" ]; then
+if [ ! -s "$USAGE_LOG" ]; then
     echo "timestamp,cpu_idle,load1_pc,load5_pc,load15_pc,rx_bytes,tx_bytes" > "$USAGE_LOG"
+    chmod 666 "$USAGE_LOG" 2>/dev/null
 fi
 
 timestamp=$(date '+%Y-%m-%d %H:%M:%S')
