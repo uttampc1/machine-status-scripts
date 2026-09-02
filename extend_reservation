@@ -75,8 +75,8 @@ else
 fi
 
 # ---- Reset idle tracking ----
-/bin/rm -f "$USAGE_LOG"
-/bin/rm -f "$STATE_FILE"
+: > "$USAGE_LOG"
+: > "$STATE_FILE"
 
 # Informational MOTD (non-empty, so update_machine accepts it)
 now="$(date)"
