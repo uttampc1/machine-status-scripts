@@ -13,7 +13,7 @@
 set -u
 
 CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
-UTILS="${UTILS:- /usr/local/lib/utils.sh}"
+UTILS="${UTILS:-/usr/local/lib/utils.sh}"
 
 # ---- Load config ----
 if [[ ! -f "$CONFIG" ]]; then
