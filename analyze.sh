@@ -4,6 +4,9 @@
 CONFIG="${CONFIG:-/usr/local/etc/machines.config}"
 [ -f "$CONFIG" ] && source "$CONFIG"
 
+UTILS="${UTILS:-/usr/local/lib/utils.sh}"
+[ -f "$UTILS" ] && source "$UTILS"
+
 # Fallback defaults if config missing or incomplete
 : "${DRY_RUN:=0}"
 : "${USAGE_LOG:=/var/log/machine-usage.csv}"
@@ -287,28 +290,6 @@ staleness_check() {
     else
         echo "HEALTHY"
     fi
-}
-
-get_machine_status() {
-    local out status reserved_by
-
-    out=$(machine-status 2>/dev/null)
-
-    if echo "$out" | grep -q "Reserved by"; then
-        status="reserved"
-        # extract the email after "Reserved by "
-        reserved_by=$(echo "$out" | grep "Reserved by" \
-            | sed -E 's/.*Reserved by[[:space:]]+([^ ]+).*/\1/')
-    elif echo "$out" | grep -q "Machine is available"; then
-        status="available"
-        reserved_by=""
-    else
-        # couldn't determine — machine-status failed or unexpected output
-        status="unknown"
-        reserved_by=""
-    fi
-
-    echo "${status}|${reserved_by}"
 }
 
 release_eta_text() {

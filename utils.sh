@@ -9,33 +9,6 @@
 : "${YELLOW:=$'\033[33m'}"
 : "${CYAN:=$'\033[36m'}"
 
-# ---- Yes/No prompt ----
-# ask_yes_no VARNAME "prompt" [default:y|n]
-# sets VARNAME to "true" or "false"
-ask_yes_no() {
-    local var="$1" prompt="$2" default="${3:-n}"
-    local hint
-    if [[ "$default" == "y" ]]; then
-        hint="Y/n"
-    else
-        hint="y/N"
-    fi
-
-    while true; do
-        printf "${CYAN}?${RESET} ${BOLD}%s${RESET} ${YELLOW}[%s]${RESET}: " \
-               "$prompt" "$hint"
-        local value=""
-        read -r value
-        [[ -z "$value" ]] && value="$default"
-
-        case "${value,,}" in
-            y|yes)  printf -v "$var" 'true';  return ;;
-            n|no)   printf -v "$var" 'false'; return ;;
-            *)      printf "${RED}  Please type y or n.${RESET}\n" ;;
-        esac
-    done
-}
-
 get_machine_status() {
     local out status reserved_by
 
