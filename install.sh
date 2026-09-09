@@ -4,6 +4,7 @@ sudo echo "Installing script, template and creating symlinks in /usr/local direc
 INSTALL_TOPDIR="/usr/local"
 INSTALL_BIN_DIR="${INSTALL_TOPDIR}/bin"
 INSTALL_LIB_DIR="${INSTALL_TOPDIR}/lib"
+INSTALL_ETC_DIR="${INSTALL_TOPDIR}/etc"
 
 TARGET_SCRIPT="${INSTALL_BIN_DIR}/machine-status"
 TARGET_MSG="${INSTALL_TOPDIR}/etc/machine-status.msg"
