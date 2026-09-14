@@ -21,9 +21,10 @@ all_command_usage() {
   printf "\n${BOLD_WHITE}Commands to Reserve / Release machine: ${RESET}\n"
   printf "${BOLD_WHITE}=================================================\n"
   printf "${BOLD}machine-status  ${RESET}             - Check machine status\n"
-  printf "${BOLD}machine-reserve <Name|Email>${RESET} - Reserve a machine\n"
+  printf "${BOLD}machine-reserve <email>${RESET}      - Reserve a machine\n"
   printf "${BOLD}machine-release ${RESET}             - Release machine\n"
   printf "${BOLD}machine-report ${RESET}              - Simple activity report\n"
+  printf "${BOLD}extend_reservation ${RESET}          - Extend current reservation\n"
   printf "\n\n${BOLD_WHITE}Other Terminal Commands: ${RESET}\n"
   printf "${BOLD_WHITE}=================================================\n"
   printf "${BOLD}list_machines  --help${RESET} - Show list of machines\n"
@@ -40,9 +41,10 @@ all_command_usage() {
 show_usage() {
   printf "${BOLD_YELLOW}Usage:${RESET}\n"
   printf "\t$ machine-status               -- To ${BOLD_YELLOW}check${RESET} machine status\n"
-  printf "\t$ machine-reserve <Name|email> -- To ${BOLD_RED}reserve${RESET}\n"
+  printf "\t$ machine-reserve <email>      -- To ${BOLD_RED}reserve${RESET}\n"
   printf "\t$ machine-release              -- To make it ${BOLD_GREEN}available${RESET} for others\n"
   printf "\t$ machine-report               -- Simple text ${BOLD_MAGENTA}report${RESET}\n"
+  printf "\t$ extend_reservation           -- To ${BOLD_RED}extend existing reservation${RESET}\n"
 
   printf "\n${BOLD_YELLOW}IMPORTANT NOTE:${RESET}\n"
   printf "\tWhen done, release the machine using the ${BOLD_GREEN}machine-release${RESET} command.\n"
