@@ -9,6 +9,7 @@
    $ machine-reserve < name | email | phone >   -- Reserve the machine. Arguments are optional.
    $ machine-release                            -- Release from reservation
    $ machine-report                             -- Display simple text report
+   $ extend_reservation                         -- Extend current reservation\n"
    $ list_machines                              -- Display list of machines from the backend server
    $ show_machine -m machine_name               -- Display detail information about the server machine
    $ add_machine    --help                      -- Display detail information about the server machine
@@ -35,9 +36,10 @@ Since: Sat Apr  4 10:31:46 PM UTC 2026
 
 Usage:
         $ machine-status               -- To check machine status
-        $ machine-reserve <Name|email> -- To reserve
+        $ machine-reserve <email>      -- To reserve
         $ machine-release              -- To make it available for others
         $ machine-report               -- Simple text report
+        $ extend_reservation           -- Extend current reservation\n"
 
 IMPORTANT NOTE:
         When done, release the machine using the machine-release command.
@@ -73,9 +75,10 @@ Since: Tue May 19 11:42:32 AM PDT 2026
 
 Usage:
         $ machine-status               -- To check machine status
-        $ machine-reserve <Name|email> -- To reserve
+        $ machine-reserve <email>      -- To reserve
         $ machine-release              -- To make it available for others
         $ machine-report               -- Simple text report
+        $ extend_reservation           -- Extend current reservation\n"
 
 IMPORTANT NOTE:
         When done, release the machine using the machine-release command.
