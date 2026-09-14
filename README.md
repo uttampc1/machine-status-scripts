@@ -9,7 +9,7 @@
    $ machine-reserve < name | email | phone >   -- Reserve the machine. Arguments are optional.
    $ machine-release                            -- Release from reservation
    $ machine-report                             -- Display simple text report
-   $ extend_reservation                         -- Extend current reservation\n"
+   $ extend_reservation                         -- Extend current reservation
    $ list_machines                              -- Display list of machines from the backend server
    $ show_machine -m machine_name               -- Display detail information about the server machine
    $ add_machine    --help                      -- Display detail information about the server machine
@@ -39,7 +39,7 @@ Usage:
         $ machine-reserve <email>      -- To reserve
         $ machine-release              -- To make it available for others
         $ machine-report               -- Simple text report
-        $ extend_reservation           -- Extend current reservation\n"
+        $ extend_reservation           -- Extend current reservation
 
 IMPORTANT NOTE:
         When done, release the machine using the machine-release command.
@@ -78,7 +78,7 @@ Usage:
         $ machine-reserve <email>      -- To reserve
         $ machine-release              -- To make it available for others
         $ machine-report               -- Simple text report
-        $ extend_reservation           -- Extend current reservation\n"
+        $ extend_reservation           -- Extend current reservation
 
 IMPORTANT NOTE:
         When done, release the machine using the machine-release command.
